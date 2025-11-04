@@ -2,12 +2,12 @@
   <h1>MedixPOS</h1>
   <p><strong>Professional Pharmacy Management System</strong></p>
   
-  [![GitHub release](https://img.shields.io/github/v/release/ShejanMahamud/pharmacy-pos)](https://github.com/ShejanMahamud/pharmacy-pos/releases)
+  [![GitHub release](https://img.shields.io/github/v/release/Johuniq/medixpos)](https://github.com/ShejanMahamud/pharmacy-pos/releases)
   [![License](https://img.shields.io/badge/License-Commercial-red)]()
   [![Windows](https://img.shields.io/badge/Windows-10%2F11-0078D6)](https://www.microsoft.com/windows)
-  [![Downloads](https://img.shields.io/github/downloads/ShejanMahamud/pharmacy-pos/total)](https://github.com/ShejanMahamud/pharmacy-pos/releases)
+  [![Downloads](https://img.shields.io/github/downloads/Johuniq/medixpos/total)](https://github.com/Johuniq/medixpos/releases)
   
-  [Download](https://github.com/ShejanMahamud/pharmacy-pos/releases/latest) • [Features](#features) • [Installation](#installation) • [Support](#support)
+  [Download](https://github.com/Johuniq/medixpos/releases/latest) • [Features](#features) • [Installation](#installation) • [Support](#support)
 </div>
 
 ## What is MedixPOS?
@@ -122,7 +122,7 @@ Clean, intuitive interface that your staff will master in minutes. No lengthy tr
 
 **Windows**
 
-1. Download the latest [MedixPOS installer](https://github.com/ShejanMahamud/pharmacy-pos/releases/latest)
+1. Download the latest [MedixPOS installer](https://github.com/Johuniq/medixpos/releases/latest)
 2. Run the `medixpos-1.0.0-setup.exe` file
 3. Follow the installation wizard
 4. Launch MedixPOS from Start Menu
