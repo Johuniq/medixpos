@@ -173,7 +173,7 @@ Have ideas for new features? Open an issue with the "Feature Request" tag.
 
 ### Getting a License
 
-**Contact**: dev.shejanmahamud@gmail.com
+**Contact**: support@johuniq.tech
 
 <!-- ## About
 
