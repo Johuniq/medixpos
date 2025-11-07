@@ -26,11 +26,11 @@ export default function CustomerSettings({
   onSave
 }: CustomerSettingsProps): React.ReactElement {
   const [localSettings, setLocalSettings] = useState({
-    enableCustomerCreditSales: settings.enableCustomerCreditSales === 'true',
-    maxCreditLimit: settings.maxCreditLimit || '50000',
-    creditDueDays: settings.creditDueDays || '30',
-    enablePrescriptionTracking: settings.enablePrescriptionTracking === 'true',
-    enableBirthdayReminders: settings.enableBirthdayReminders === 'true'
+    enableCustomerCreditSales: settings.enable_customer_credit_sales === 'true',
+    maxCreditLimit: settings.max_credit_limit || '50000',
+    creditDueDays: settings.credit_due_days || '30',
+    enablePrescriptionTracking: settings.enable_prescription_tracking === 'true',
+    enableBirthdayReminders: settings.enable_birthday_reminders === 'true'
   })
 
   const [saving, setSaving] = useState(false)
@@ -47,11 +47,11 @@ export default function CustomerSettings({
 
     try {
       await onSave({
-        enableCustomerCreditSales: String(localSettings.enableCustomerCreditSales),
-        maxCreditLimit: localSettings.maxCreditLimit,
-        creditDueDays: localSettings.creditDueDays,
-        enablePrescriptionTracking: String(localSettings.enablePrescriptionTracking),
-        enableBirthdayReminders: String(localSettings.enableBirthdayReminders)
+        enable_customer_credit_sales: String(localSettings.enableCustomerCreditSales),
+        max_credit_limit: localSettings.maxCreditLimit,
+        credit_due_days: localSettings.creditDueDays,
+        enable_prescription_tracking: String(localSettings.enablePrescriptionTracking),
+        enable_birthday_reminders: String(localSettings.enableBirthdayReminders)
       })
       setMessage({ type: 'success', text: 'Customer settings saved successfully!' })
     } catch (error) {

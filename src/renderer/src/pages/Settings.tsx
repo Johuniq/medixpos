@@ -113,9 +113,13 @@ export default function Settings(): React.JSX.Element {
   }
 
   const handleSaveSettings = async (updates: Record<string, string>): Promise<void> => {
+    const userId = user?.id ?? null
+    const username = user?.username ?? user?.fullName ?? null
     try {
       await Promise.all(
-        Object.entries(updates).map(([key, value]) => window.api.settings.update(key, value))
+        Object.entries(updates).map(([key, value]) =>
+          window.api.settings.update(key, value, userId, username)
+        )
       )
 
       // Update local state
@@ -134,18 +138,12 @@ export default function Settings(): React.JSX.Element {
   const handleSaveGeneral = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault()
     try {
-      await Promise.all([
-        window.api.settings.update('store_name', storeName),
-        window.api.settings.update('store_phone', storePhone),
-        window.api.settings.update('store_email', storeEmail),
-        window.api.settings.update('store_address', storeAddress)
-      ])
-
-      // Update store
-      updateSetting('store_name', storeName)
-      updateSetting('store_phone', storePhone)
-      updateSetting('store_email', storeEmail)
-      updateSetting('store_address', storeAddress)
+      await handleSaveSettings({
+        store_name: storeName,
+        store_phone: storePhone,
+        store_email: storeEmail,
+        store_address: storeAddress
+      })
 
       toast.success('General settings saved successfully')
     } catch (error) {
@@ -157,16 +155,11 @@ export default function Settings(): React.JSX.Element {
   const handleSaveSystem = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault()
     try {
-      await Promise.all([
-        window.api.settings.update('tax_rate', taxRate),
-        window.api.settings.update('currency', currency),
-        window.api.settings.update('low_stock_threshold', lowStockThreshold)
-      ])
-
-      // Update store
-      updateSetting('tax_rate', taxRate)
-      updateSetting('currency', currency)
-      updateSetting('low_stock_threshold', lowStockThreshold)
+      await handleSaveSettings({
+        tax_rate: taxRate,
+        currency,
+        low_stock_threshold: lowStockThreshold
+      })
 
       toast.success('System settings saved successfully')
     } catch (error) {
@@ -178,10 +171,7 @@ export default function Settings(): React.JSX.Element {
   const handleSaveReceipt = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault()
     try {
-      await window.api.settings.update('receipt_footer', receiptFooter)
-
-      // Update store
-      updateSetting('receipt_footer', receiptFooter)
+      await handleSaveSettings({ receipt_footer: receiptFooter })
 
       toast.success('Receipt settings saved successfully')
     } catch (error) {

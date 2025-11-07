@@ -26,15 +26,15 @@ export default function NotificationSettings({
   onSave
 }: NotificationSettingsProps): ReactElement {
   const [localSettings, setLocalSettings] = useState({
-    enableEmailNotifications: settings.enableEmailNotifications === 'true',
-    emailHost: settings.emailHost || '',
-    emailPort: settings.emailPort || '587',
-    emailUsername: settings.emailUsername || '',
-    emailFrom: settings.emailFrom || '',
-    enableSmsNotifications: settings.enableSmsNotifications === 'false' ? false : false,
-    smsProvider: settings.smsProvider || '',
-    smsApiKey: settings.smsApiKey || '',
-    enableDesktopNotifications: settings.enableDesktopNotifications === 'true'
+    enableEmailNotifications: settings.enable_email_notifications === 'true',
+    emailHost: settings.email_host || '',
+    emailPort: settings.email_port || '587',
+    emailUsername: settings.email_username || '',
+    emailFrom: settings.email_from || '',
+    enableSmsNotifications: settings.enable_sms_notifications === 'true',
+    smsProvider: settings.sms_provider || '',
+    smsApiKey: settings.sms_api_key || '',
+    enableDesktopNotifications: settings.enable_desktop_notifications === 'true'
   })
 
   const [saving, setSaving] = useState(false)
@@ -51,15 +51,15 @@ export default function NotificationSettings({
 
     try {
       await onSave({
-        enableEmailNotifications: String(localSettings.enableEmailNotifications),
-        emailHost: localSettings.emailHost,
-        emailPort: localSettings.emailPort,
-        emailUsername: localSettings.emailUsername,
-        emailFrom: localSettings.emailFrom,
-        enableSmsNotifications: String(localSettings.enableSmsNotifications),
-        smsProvider: localSettings.smsProvider,
-        smsApiKey: localSettings.smsApiKey,
-        enableDesktopNotifications: String(localSettings.enableDesktopNotifications)
+        enable_email_notifications: String(localSettings.enableEmailNotifications),
+        email_host: localSettings.emailHost,
+        email_port: localSettings.emailPort,
+        email_username: localSettings.emailUsername,
+        email_from: localSettings.emailFrom,
+        enable_sms_notifications: String(localSettings.enableSmsNotifications),
+        sms_provider: localSettings.smsProvider,
+        sms_api_key: localSettings.smsApiKey,
+        enable_desktop_notifications: String(localSettings.enableDesktopNotifications)
       })
       setMessage({ type: 'success', text: 'Notification settings saved successfully!' })
     } catch {

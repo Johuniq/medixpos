@@ -6,15 +6,18 @@
 
 import { ipcMain } from 'electron'
 import { initDatabase } from '../../database'
+import { sessionManager } from '../../security/session-manager'
 import { LicenseService } from '../../services/license'
 import { registerDatabaseHandlers } from '../database-handlers'
 
 export function registerLicenseHandlers(): void {
   const licenseService = LicenseService.getInstance()
+  const adminRoles: Array<'super_admin' | 'admin'> = ['super_admin', 'admin']
 
   // Validate license
-  ipcMain.handle('license:validate', async (_, licenseKey?: string, activationId?: string) => {
+  ipcMain.handle('license:validate', async (_event, licenseKey?: string, activationId?: string) => {
     try {
+      await licenseService.whenReady()
       const result = await licenseService.validateLicense(licenseKey, activationId)
 
       // If validation successful and database not initialized yet, initialize it now
@@ -43,21 +46,44 @@ export function registerLicenseHandlers(): void {
   })
 
   // Activate license
-  ipcMain.handle('license:activate', async (_, licenseKey: string, label?: string) => {
-    try {
-      return await licenseService.activateLicense(licenseKey, label)
-    } catch (error) {
-      console.error('Error activating license:', error)
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : 'Unknown error occurred'
+  ipcMain.handle(
+    'license:activate',
+    async (event, payload: { licenseKey: string; label?: string; sessionToken?: string }) => {
+      try {
+        await licenseService.whenReady()
+        const { licenseKey, label, sessionToken } = payload || {}
+
+        if (!licenseKey) {
+          return { success: false, message: 'License key is required' }
+        }
+
+        if (licenseService.hasStoredLicense()) {
+          const session = sessionManager.validateToken(event, sessionToken, adminRoles)
+          if (!session) {
+            return { success: false, message: 'Unauthorized license activation' }
+          }
+        }
+
+        return await licenseService.activateLicense(licenseKey, label)
+      } catch (error) {
+        console.error('Error activating license:', error)
+        return {
+          success: false,
+          message: error instanceof Error ? error.message : 'Unknown error occurred'
+        }
       }
     }
-  })
+  )
 
   // Deactivate license
-  ipcMain.handle('license:deactivate', async () => {
+  ipcMain.handle('license:deactivate', async (event, payload: { sessionToken?: string }) => {
     try {
+      await licenseService.whenReady()
+      const session = sessionManager.validateToken(event, payload?.sessionToken, adminRoles)
+      if (!session) {
+        return { success: false, message: 'Unauthorized license deactivation' }
+      }
+
       return await licenseService.deactivateLicense()
     } catch (error) {
       console.error('Error deactivating license:', error)
@@ -69,8 +95,9 @@ export function registerLicenseHandlers(): void {
   })
 
   // Get license info
-  ipcMain.handle('license:getInfo', () => {
+  ipcMain.handle('license:getInfo', async () => {
     try {
+      await licenseService.whenReady()
       return licenseService.getLicenseInfo()
     } catch (error) {
       console.error('Error getting license info:', error)
@@ -81,8 +108,9 @@ export function registerLicenseHandlers(): void {
   })
 
   // Check if needs revalidation
-  ipcMain.handle('license:needsRevalidation', () => {
+  ipcMain.handle('license:needsRevalidation', async () => {
     try {
+      await licenseService.whenReady()
       return licenseService.needsRevalidation()
     } catch (error) {
       console.error('Error checking revalidation:', error)
@@ -91,9 +119,15 @@ export function registerLicenseHandlers(): void {
   })
 
   // Clear license
-  ipcMain.handle('license:clear', () => {
+  ipcMain.handle('license:clear', async (event, payload: { sessionToken?: string }) => {
     try {
-      licenseService.clearLicense()
+      await licenseService.whenReady()
+      const session = sessionManager.validateToken(event, payload?.sessionToken, ['super_admin'])
+      if (!session) {
+        return { success: false, message: 'Unauthorized license removal' }
+      }
+
+      await licenseService.clearLicense()
       return { success: true }
     } catch (error) {
       console.error('Error clearing license:', error)
@@ -107,6 +141,7 @@ export function registerLicenseHandlers(): void {
   // Get machine ID for display
   ipcMain.handle('license:getMachineId', async () => {
     try {
+      await licenseService.whenReady()
       return await licenseService.getMachineIdForDisplay()
     } catch (error) {
       console.error('Error getting machine ID:', error)

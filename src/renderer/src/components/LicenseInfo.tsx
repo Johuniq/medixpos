@@ -26,6 +26,7 @@ import {
 import { format } from 'date-fns'
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
+import { useAuthStore } from '../store/authStore'
 
 interface LicenseInfoProps {
   onActivateClick: () => void
@@ -45,6 +46,7 @@ export default function LicenseInfo({ onActivateClick }: LicenseInfoProps): Reac
   const [loading, setLoading] = useState(true)
   const [validating, setValidating] = useState(false)
   const [deactivateDialogOpen, setDeactivateDialogOpen] = useState(false)
+  const sessionToken = useAuthStore((state) => state.sessionToken)
 
   const loadLicenseInfo = async (): Promise<void> => {
     try {
@@ -80,7 +82,7 @@ export default function LicenseInfo({ onActivateClick }: LicenseInfoProps): Reac
 
   const handleDeactivate = async (): Promise<void> => {
     try {
-      const result = await window.api.license.deactivate()
+      const result = await window.api.license.deactivate(sessionToken ?? undefined)
       if (result.success) {
         toast.success('License deactivated successfully')
         await loadLicenseInfo()

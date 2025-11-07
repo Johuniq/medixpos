@@ -10,6 +10,8 @@ import { ipcMain } from 'electron'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../../database'
 import * as schema from '../../database/schema'
+import type { SessionRole } from '../../security/session-manager'
+import { sessionManager } from '../../security/session-manager'
 import { createAuditLog, SALT_ROUNDS } from '../utils/audit-logger'
 
 export function registerUsersHandlers(): void {
@@ -26,7 +28,7 @@ export function registerUsersHandlers(): void {
   })
 
   // Authenticate user
-  ipcMain.handle('db:users:authenticate', async (_, { username, password }) => {
+  ipcMain.handle('db:users:authenticate', async (event, { username, password }) => {
     // Get user by username
     const user = db
       .select()
@@ -42,8 +44,15 @@ export function registerUsersHandlers(): void {
     // Verify password using bcrypt
     const isPasswordValid = await bcrypt.compare(password, user.password)
 
-    // Return user if password is valid, otherwise null
-    return isPasswordValid ? user : null
+    if (!isPasswordValid) {
+      return null
+    }
+
+    const sessionToken = sessionManager.issueToken(event, user.id, user.role as SessionRole)
+    // Exclude password hash before returning to renderer
+    const { password: removedPassword, ...safeUser } = user
+    void removedPassword
+    return { ...safeUser, sessionToken }
   })
 
   // Create new user
@@ -94,7 +103,7 @@ export function registerUsersHandlers(): void {
       .get()
 
     // Create audit log with changes
-    const changes: any = {}
+    const changes: Record<string, { old: unknown; new: unknown }> = {}
     if (oldUser) {
       Object.keys(updateData).forEach((key) => {
         if (key !== 'password' && oldUser[key] !== updateData[key]) {
@@ -235,5 +244,10 @@ export function registerUsersHandlers(): void {
     })
 
     return updatedUser
+  })
+
+  ipcMain.handle('auth:invalidateSession', (_, token: string | null | undefined) => {
+    sessionManager.invalidateToken(token)
+    return { success: true }
   })
 }

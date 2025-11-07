@@ -30,14 +30,12 @@ import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 import ChangePasswordModal from '../components/ChangePasswordModal'
-import { useAuthStore } from '../store/authStore'
+import { useAuthStore, type AuthenticatedUserResponse } from '../store/authStore'
 
-interface User {
-  id: string
-  username: string
-  fullName?: string
-  mustChangePassword?: boolean
-}
+type PendingPasswordUser = Pick<
+  AuthenticatedUserResponse,
+  'id' | 'username' | 'fullName' | 'mustChangePassword'
+>
 
 interface InitialCredentials {
   username: string
@@ -51,10 +49,11 @@ export default function Login(): React.JSX.Element {
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showChangePassword, setShowChangePassword] = useState(false)
-  const [loggedInUser, setLoggedInUser] = useState<User | null>(null)
+  const [loggedInUser, setLoggedInUser] = useState<PendingPasswordUser | null>(null)
   const [initialCredentials, setInitialCredentials] = useState<InitialCredentials | null>(null)
   const navigate = useNavigate()
   const login = useAuthStore((state) => state.login)
+  const applyAuthenticatedUser = useAuthStore((state) => state.applyAuthenticatedUser)
 
   // Check for initial setup credentials on mount and when window gains focus
   useEffect(() => {
@@ -120,7 +119,7 @@ export default function Login(): React.JSX.Element {
       const authenticatedUser = (await window.api.users.authenticate(
         username,
         password
-      )) as User | null
+      )) as AuthenticatedUserResponse | null
 
       if (authenticatedUser) {
         // Clear initial credentials after successful first login
@@ -140,7 +139,12 @@ export default function Login(): React.JSX.Element {
 
         // Check if user must change password
         if (authenticatedUser.mustChangePassword) {
-          setLoggedInUser(authenticatedUser)
+          setLoggedInUser({
+            id: authenticatedUser.id,
+            username: authenticatedUser.username,
+            fullName: authenticatedUser.fullName,
+            mustChangePassword: authenticatedUser.mustChangePassword
+          })
           setShowChangePassword(true)
           toast('You must change your password before continuing', {
             icon: 'ℹ️',
@@ -148,11 +152,9 @@ export default function Login(): React.JSX.Element {
           })
         } else {
           // Normal login flow
-          const success = await login(username, password)
-          if (success) {
-            toast.success('Login successful!')
-            navigate('/')
-          }
+          applyAuthenticatedUser(authenticatedUser)
+          toast.success('Login successful!')
+          navigate('/')
         }
       } else {
         toast.error('Invalid username or password')

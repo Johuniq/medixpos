@@ -41,6 +41,7 @@
     "jsbarcode": "^3.12.1",
     "jspdf": "^3.0.3",
     "jspdf-autotable": "^5.0.2",
+    "keytar": "^7.9.0",
     "node-machine-id": "^1.1.12",
     "react-barcode": "^1.6.1",
     "react-hot-toast": "^2.6.0",
@@ -86,6 +87,9 @@
       "electron",
       "esbuild",
       "better-sqlite3"
+    ],
+    "ignoredBuiltDependencies": [
+      "keytar"
     ]
   }
 }

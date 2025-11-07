@@ -17,13 +17,20 @@ interface User {
   createdBy?: string
 }
 
+export interface AuthenticatedUserResponse extends User {
+  mustChangePassword?: boolean
+  sessionToken: string
+}
+
 interface AuthState {
   user: User | null
   isAuthenticated: boolean
   lastActivity: number
+  sessionToken: string | null
   login: (username: string, password: string) => Promise<boolean>
   logout: () => void
   setUser: (user: User) => void
+  applyAuthenticatedUser: (user: AuthenticatedUserResponse) => void
   updateActivity: () => void
   checkSessionTimeout: () => boolean
 }
@@ -34,21 +41,32 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       isAuthenticated: false,
       lastActivity: Date.now(),
+      sessionToken: null,
       login: async (username: string, password: string) => {
         try {
           if (!window.api) {
             console.error('window.api not available in login')
             return false
           }
-          const user = await window.api.users.authenticate(username, password)
-          if (user) {
-            set({ user, isAuthenticated: true, lastActivity: Date.now() })
+          const authenticatedUser = (await window.api.users.authenticate(
+            username,
+            password
+          )) as AuthenticatedUserResponse | null
+
+          if (authenticatedUser) {
+            const { sessionToken, ...safeUser } = authenticatedUser
+            set({
+              user: safeUser,
+              sessionToken,
+              isAuthenticated: true,
+              lastActivity: Date.now()
+            })
             try {
               await window.api.auditLogs.create({
-                userId: user.id,
+                userId: authenticatedUser.id,
                 action: 'login',
                 entityType: 'user',
-                entityId: user.id
+                entityId: authenticatedUser.id
               })
             } catch (auditError) {
               console.error('Failed to create audit log:', auditError)
@@ -63,7 +81,14 @@ export const useAuthStore = create<AuthState>()(
       },
       logout: () => {
         try {
-          const currentUser = useAuthStore.getState().user
+          const currentState = useAuthStore.getState()
+          if (currentState.sessionToken && window.api) {
+            window.api.auth.invalidateSession(currentState.sessionToken).catch((error) => {
+              console.error('Failed to invalidate session token:', error)
+            })
+          }
+
+          const currentUser = currentState.user
           if (currentUser && window.api) {
             window.api.auditLogs
               .create({
@@ -77,14 +102,23 @@ export const useAuthStore = create<AuthState>()(
                 console.error('Failed to create logout audit log:', error)
               })
           }
-          set({ user: null, isAuthenticated: false })
+          set({ user: null, sessionToken: null, isAuthenticated: false })
         } catch (error) {
           console.error('Logout error:', error)
-          set({ user: null, isAuthenticated: false })
+          set({ user: null, sessionToken: null, isAuthenticated: false })
         }
       },
       setUser: (user: User) => {
         set({ user, isAuthenticated: true, lastActivity: Date.now() })
+      },
+      applyAuthenticatedUser: (authenticatedUser: AuthenticatedUserResponse) => {
+        const { sessionToken, ...safeUser } = authenticatedUser
+        set({
+          user: safeUser,
+          sessionToken,
+          isAuthenticated: true,
+          lastActivity: Date.now()
+        })
       },
       updateActivity: () => {
         set({ lastActivity: Date.now() })
@@ -108,7 +142,17 @@ export const useAuthStore = create<AuthState>()(
       }
     }),
     {
-      name: 'auth-storage'
+      name: 'auth-storage',
+      partialize: (state) => ({
+        user: state.user,
+        isAuthenticated: state.isAuthenticated,
+        lastActivity: state.lastActivity
+      }),
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          state.sessionToken = null
+        }
+      }
     }
   )
 )

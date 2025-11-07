@@ -27,13 +27,14 @@ export default function ReportsSettings({
   onSave
 }: ReportsSettingsProps): React.ReactElement {
   const [localSettings, setLocalSettings] = useState({
-    enableAutoReports: settings.enableAutoReports === 'true',
-    autoReportFrequency: settings.autoReportFrequency || 'daily',
-    autoReportEmail: settings.autoReportEmail || '',
-    autoReportTypes: settings.autoReportTypes || 'sales,inventory',
-    enableReportExport: settings.enableReportExport === 'true',
-    defaultReportFormat: settings.defaultReportFormat || 'pdf',
-    reportRetentionDays: settings.reportRetentionDays || '90'
+    autoExportEnabled: settings.reports_auto_export_enabled === 'true',
+    autoExportSchedule: settings.reports_auto_export_schedule || 'daily',
+    autoExportFormat: settings.reports_auto_export_format || 'pdf',
+    autoExportTypes: settings.reports_auto_export_types || 'sales,inventory',
+    defaultDateRange: settings.reports_default_date_range || 'last_30_days',
+    includeCharts: settings.reports_include_charts !== 'false',
+    emailEnabled: settings.reports_email_enabled === 'true',
+    emailRecipients: settings.reports_email_recipients || ''
   })
 
   const [saving, setSaving] = useState(false)
@@ -50,13 +51,14 @@ export default function ReportsSettings({
 
     try {
       await onSave({
-        enableAutoReports: String(localSettings.enableAutoReports),
-        autoReportFrequency: localSettings.autoReportFrequency,
-        autoReportEmail: localSettings.autoReportEmail,
-        autoReportTypes: localSettings.autoReportTypes,
-        enableReportExport: String(localSettings.enableReportExport),
-        defaultReportFormat: localSettings.defaultReportFormat,
-        reportRetentionDays: localSettings.reportRetentionDays
+        reports_auto_export_enabled: String(localSettings.autoExportEnabled),
+        reports_auto_export_schedule: localSettings.autoExportSchedule,
+        reports_auto_export_format: localSettings.autoExportFormat,
+        reports_auto_export_types: localSettings.autoExportTypes,
+        reports_default_date_range: localSettings.defaultDateRange,
+        reports_include_charts: String(localSettings.includeCharts),
+        reports_email_enabled: String(localSettings.emailEnabled),
+        reports_email_recipients: localSettings.emailRecipients
       })
       setMessage({ type: 'success', text: 'Reports settings saved successfully!' })
     } catch {
@@ -82,27 +84,27 @@ export default function ReportsSettings({
       )}
 
       <Box component="form" onSubmit={handleSubmit}>
-        {/* Auto Reports */}
+        {/* Automatic Exports */}
         <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600 }}>
-          Automatic Reports
+          Automatic Exports
         </Typography>
         <Box sx={{ display: 'grid', gap: 2, mb: 3 }}>
           <FormControlLabel
             control={
               <Switch
-                checked={localSettings.enableAutoReports}
-                onChange={(e) => handleChange('enableAutoReports', e.target.checked)}
+                checked={localSettings.autoExportEnabled}
+                onChange={(e) => handleChange('autoExportEnabled', e.target.checked)}
               />
             }
-            label="Enable Automatic Report Generation"
+            label="Enable Automatic Export"
           />
-          {localSettings.enableAutoReports && (
+          {localSettings.autoExportEnabled && (
             <>
               <TextField
                 select
-                label="Report Frequency"
-                value={localSettings.autoReportFrequency}
-                onChange={(e) => handleChange('autoReportFrequency', e.target.value)}
+                label="Export Schedule"
+                value={localSettings.autoExportSchedule}
+                onChange={(e) => handleChange('autoExportSchedule', e.target.value)}
                 fullWidth
               >
                 <MenuItem value="daily">Daily</MenuItem>
@@ -110,17 +112,9 @@ export default function ReportsSettings({
                 <MenuItem value="monthly">Monthly</MenuItem>
               </TextField>
               <TextField
-                label="Email Address for Auto Reports"
-                type="email"
-                value={localSettings.autoReportEmail}
-                onChange={(e) => handleChange('autoReportEmail', e.target.value)}
-                fullWidth
-                helperText="Multiple emails separated by comma"
-              />
-              <TextField
                 label="Report Types"
-                value={localSettings.autoReportTypes}
-                onChange={(e) => handleChange('autoReportTypes', e.target.value)}
+                value={localSettings.autoExportTypes}
+                onChange={(e) => handleChange('autoExportTypes', e.target.value)}
                 fullWidth
                 helperText="Comma-separated: sales, inventory, purchases, expenses"
               />
@@ -128,47 +122,69 @@ export default function ReportsSettings({
           )}
         </Box>
 
-        {/* Export Settings */}
+        {/* Output Preferences */}
         <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600 }}>
           Export Settings
         </Typography>
         <Box sx={{ display: 'grid', gap: 2, mb: 3 }}>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={localSettings.enableReportExport}
-                onChange={(e) => handleChange('enableReportExport', e.target.checked)}
-              />
-            }
-            label="Enable Report Export"
-          />
           <TextField
             select
             label="Default Export Format"
-            value={localSettings.defaultReportFormat}
-            onChange={(e) => handleChange('defaultReportFormat', e.target.value)}
+            value={localSettings.autoExportFormat}
+            onChange={(e) => handleChange('autoExportFormat', e.target.value)}
             fullWidth
           >
             <MenuItem value="pdf">PDF</MenuItem>
             <MenuItem value="excel">Excel</MenuItem>
             <MenuItem value="csv">CSV</MenuItem>
           </TextField>
+          <TextField
+            select
+            label="Default Date Range"
+            value={localSettings.defaultDateRange}
+            onChange={(e) => handleChange('defaultDateRange', e.target.value)}
+            fullWidth
+          >
+            <MenuItem value="today">Today</MenuItem>
+            <MenuItem value="last_7_days">Last 7 Days</MenuItem>
+            <MenuItem value="last_30_days">Last 30 Days</MenuItem>
+            <MenuItem value="month_to_date">Month to Date</MenuItem>
+            <MenuItem value="year_to_date">Year to Date</MenuItem>
+          </TextField>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={localSettings.includeCharts}
+                onChange={(e) => handleChange('includeCharts', e.target.checked)}
+              />
+            }
+            label="Include Charts in Exports"
+          />
         </Box>
 
         {/* Data Retention */}
         <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600 }}>
-          Data Retention
+          Email Delivery
         </Typography>
         <Box sx={{ display: 'grid', gap: 2, mb: 3 }}>
-          <TextField
-            label="Report Retention Period (Days)"
-            type="number"
-            value={localSettings.reportRetentionDays}
-            onChange={(e) => handleChange('reportRetentionDays', e.target.value)}
-            fullWidth
-            helperText="How long to keep generated reports (0 = keep forever)"
-            inputProps={{ min: 0 }}
+          <FormControlLabel
+            control={
+              <Switch
+                checked={localSettings.emailEnabled}
+                onChange={(e) => handleChange('emailEnabled', e.target.checked)}
+              />
+            }
+            label="Email Reports Automatically"
           />
+          {localSettings.emailEnabled && (
+            <TextField
+              label="Email Recipients"
+              value={localSettings.emailRecipients}
+              onChange={(e) => handleChange('emailRecipients', e.target.value)}
+              fullWidth
+              helperText="Multiple emails separated by commas"
+            />
+          )}
         </Box>
 
         <Button type="submit" variant="contained" disabled={saving} sx={{ mt: 2 }}>

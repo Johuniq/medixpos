@@ -13,12 +13,13 @@ const api = {
   license: {
     validate: (licenseKey?: string, activationId?: string) =>
       ipcRenderer.invoke('license:validate', licenseKey, activationId),
-    activate: (licenseKey: string, label?: string) =>
-      ipcRenderer.invoke('license:activate', licenseKey, label),
-    deactivate: () => ipcRenderer.invoke('license:deactivate'),
+    activate: (licenseKey: string, label?: string, sessionToken?: string) =>
+      ipcRenderer.invoke('license:activate', { licenseKey, label, sessionToken }),
+    deactivate: (sessionToken?: string) =>
+      ipcRenderer.invoke('license:deactivate', { sessionToken }),
     getInfo: () => ipcRenderer.invoke('license:getInfo'),
     needsRevalidation: () => ipcRenderer.invoke('license:needsRevalidation'),
-    clear: () => ipcRenderer.invoke('license:clear'),
+    clear: (sessionToken?: string) => ipcRenderer.invoke('license:clear', { sessionToken }),
     getMachineId: () => ipcRenderer.invoke('license:getMachineId')
   },
   // Users
@@ -165,7 +166,8 @@ const api = {
   settings: {
     getAll: () => ipcRenderer.invoke('db:settings:getAll'),
     get: (key: string) => ipcRenderer.invoke('db:settings:get', key),
-    update: (key: string, value: string) => ipcRenderer.invoke('db:settings:update', { key, value })
+    update: (key: string, value: string, userId?: string | null, username?: string | null) =>
+      ipcRenderer.invoke('db:settings:update', { key, value, userId, username })
   },
   // Reports
   reports: {
@@ -214,6 +216,10 @@ const api = {
   setup: {
     getInitialCredentials: () => ipcRenderer.invoke('setup:getInitialCredentials'),
     clearInitialCredentials: () => ipcRenderer.invoke('setup:clearInitialCredentials')
+  },
+  auth: {
+    invalidateSession: (token: string | null | undefined) =>
+      ipcRenderer.invoke('auth:invalidateSession', token)
   }
 }
 

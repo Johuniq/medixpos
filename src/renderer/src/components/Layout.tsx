@@ -49,7 +49,7 @@ export default function Layout(): React.JSX.Element {
   const { hasPermission } = usePermissions()
   const location = useLocation()
 
-  const isActive = (path: string) => {
+  const isActive = (path: string): boolean => {
     return location.pathname === path
   }
 
@@ -178,10 +178,10 @@ export default function Layout(): React.JSX.Element {
             </Avatar>
             <Box>
               <Typography variant="h6" sx={{ fontWeight: 'bold', lineHeight: 1.2 }}>
-                {storeName || 'Pharmacy POS'}
+                {storeName || 'MedixPOS'}
               </Typography>
               <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)' }}>
-                Management System
+                Pharmacy Management
               </Typography>
             </Box>
           </Box>

@@ -7,7 +7,6 @@
 import { Polar } from '@polar-sh/sdk'
 import crypto from 'crypto'
 import { app } from 'electron'
-import fs from 'fs'
 import { machineId } from 'node-machine-id'
 
 // Use require for electron-store to avoid ESM/CJS issues
@@ -18,13 +17,15 @@ const Store = ElectronStore.default || ElectronStore
 /**
  * License configuration stored securely with encryption
  */
+type LicenseStatus = 'active' | 'expired' | 'invalid' | 'inactive'
+
 interface LicenseConfig {
   licenseKey?: string
   activationId?: string
   organizationId: string
   lastValidated?: string
   expiresAt?: string
-  status?: 'active' | 'expired' | 'invalid' | 'inactive'
+  status?: LicenseStatus
   validations?: number
   usage?: number
   limitUsage?: number
@@ -37,13 +38,15 @@ interface LicenseConfig {
  */
 interface LicenseValidationResponse {
   valid: boolean
-  status: 'active' | 'expired' | 'invalid' | 'inactive'
+  status: LicenseStatus
   expiresAt?: string
   usage?: number
   limitUsage?: number
   message?: string
   details?: Record<string, unknown>
 }
+
+type KeytarModule = typeof import('keytar')
 
 /**
  * Secure License service for managing Polar.sh license keys
@@ -63,11 +66,6 @@ interface LicenseValidationResponse {
  */
 export class LicenseService {
   private static instance: LicenseService
-  private licenseConfig: LicenseConfig
-  private store: typeof Store
-  private polar: Polar
-  private currentMachineId: string = ''
-  private lastTamperCheck: number = 0
 
   /**
    * Your Polar Organization ID (UUID format)
@@ -76,42 +74,23 @@ export class LicenseService {
    */
   private readonly ORGANIZATION_ID =
     process.env.POLAR_ORG_ID || '9cce1897-ade4-4777-81fb-e40048b6a22d'
+  private readonly KEYTAR_SERVICE = 'medixpos-license'
+  private readonly KEYTAR_ENCRYPTION_ACCOUNT = 'secure-storage'
+  private readonly KEYTAR_HMAC_ACCOUNT = 'integrity-key'
 
-  /**
-   * Secret key for HMAC signature (unique per app)
-   * This should be different for each build or stored securely
-   */
-  private readonly HMAC_SECRET = this.generateHmacSecret()
-
-  /**
-   * Encryption key for electron-store (generated per installation)
-   */
-  private readonly ENCRYPTION_KEY = this.getOrCreateEncryptionKey()
+  private store: typeof Store | null = null
+  private licenseConfig: LicenseConfig = { organizationId: this.ORGANIZATION_ID }
+  private polar: Polar
+  private keytar: KeytarModule | null = null
+  private currentMachineId: string = ''
+  private cachedHmacSecret: string | null = null
+  private encryptionKey: string | null = null
+  private lastTamperCheck: number = 0
+  private readonly readyPromise: Promise<void>
 
   private constructor() {
-    // Initialize encrypted store
-    this.store = new Store({
-      name: 'license',
-      encryptionKey: this.ENCRYPTION_KEY,
-      clearInvalidConfig: true,
-      schema: {
-        organizationId: { type: 'string' },
-        licenseKey: { type: 'string' },
-        activationId: { type: 'string' },
-        lastValidated: { type: 'string' },
-        expiresAt: { type: 'string' },
-        status: { type: 'string' },
-        machineId: { type: 'string' },
-        signature: { type: 'string' }
-      }
-    })
-
-    this.licenseConfig = this.loadConfig()
-
-    // Initialize Polar SDK (no authentication needed for customer portal endpoints)
     this.polar = new Polar()
-
-    // Start anti-tampering checks
+    this.readyPromise = this.initialize()
     this.startTamperDetection()
   }
 
@@ -122,43 +101,119 @@ export class LicenseService {
     return LicenseService.instance
   }
 
-  /**
-   * Generate or retrieve encryption key for electron-store
-   * This key is unique per installation
-   */
-  private getOrCreateEncryptionKey(): string {
-    const keyPath = app.getPath('userData') + '/.ek'
-
-    try {
-      if (fs.existsSync(keyPath)) {
-        return fs.readFileSync(keyPath, 'utf8')
-      }
-    } catch {
-      // Key file doesn't exist, generate new one
-    }
-
-    // Generate new encryption key
-    const key = crypto.randomBytes(32).toString('hex')
-
-    try {
-      fs.writeFileSync(keyPath, key, { mode: 0o600 })
-    } catch {
-      // Will use key in memory if can't save
-    }
-
-    return key
+  public async whenReady(): Promise<void> {
+    await this.readyPromise
   }
 
-  /**
-   * Generate HMAC secret based on app version and machine
-   */
-  private generateHmacSecret(): string {
-    const appVersion = app.getVersion()
-    const appName = app.getName()
-    return crypto
+  public hasStoredLicense(): boolean {
+    return !!this.licenseConfig.licenseKey
+  }
+
+  private async initialize(): Promise<void> {
+    try {
+      await this.loadKeytar()
+      this.encryptionKey = await this.getOrCreateEncryptionKey()
+      this.store = new Store({
+        name: 'license',
+        encryptionKey: this.encryptionKey,
+        clearInvalidConfig: true,
+        schema: {
+          organizationId: { type: 'string' },
+          licenseKey: { type: 'string' },
+          activationId: { type: 'string' },
+          lastValidated: { type: 'string' },
+          expiresAt: { type: 'string' },
+          status: { type: 'string' },
+          machineId: { type: 'string' },
+          signature: { type: 'string' }
+        }
+      })
+      this.licenseConfig = await this.loadConfig()
+    } catch (error) {
+      this.secureLog('error', 'License service initialization failed', error)
+      this.store = new Store({ name: 'license-fallback', clearInvalidConfig: true })
+      this.licenseConfig = { organizationId: this.ORGANIZATION_ID }
+    }
+  }
+
+  private async loadKeytar(): Promise<void> {
+    if (this.keytar !== null) {
+      return
+    }
+
+    try {
+      const module = await import('keytar')
+      this.keytar = module.default ?? module
+    } catch (error) {
+      this.keytar = null
+      this.secureLog('warn', 'Keytar unavailable, falling back to derived secrets', error)
+    }
+  }
+
+  private async getOrCreateEncryptionKey(): Promise<string> {
+    const envKey = process.env.MEDIXPOS_LICENSE_ENC_KEY
+    if (envKey && envKey.length >= 32) {
+      return envKey
+    }
+
+    const machine = await this.getMachineId()
+
+    if (this.keytar) {
+      try {
+        const account = `${machine}-${this.KEYTAR_ENCRYPTION_ACCOUNT}`
+        const existing = await this.keytar.getPassword(this.KEYTAR_SERVICE, account)
+        if (existing) {
+          return existing
+        }
+
+        const newKey = crypto.randomBytes(32).toString('hex')
+        await this.keytar.setPassword(this.KEYTAR_SERVICE, account, newKey)
+        return newKey
+      } catch (error) {
+        this.secureLog('warn', 'Failed to access system credential store', error)
+      }
+    }
+
+    return crypto.createHash('sha256').update(`${machine}|${this.ORGANIZATION_ID}`).digest('hex')
+  }
+
+  private async getHmacSecret(): Promise<string> {
+    if (this.cachedHmacSecret) {
+      return this.cachedHmacSecret
+    }
+
+    const envSecret = process.env.POLAR_LICENSE_SECRET
+    if (envSecret && envSecret.length >= 32) {
+      this.cachedHmacSecret = envSecret
+      return envSecret
+    }
+
+    const machine = await this.getMachineId()
+
+    if (this.keytar) {
+      try {
+        const account = `${machine}-${this.KEYTAR_HMAC_ACCOUNT}`
+        const existing = await this.keytar.getPassword(this.KEYTAR_SERVICE, account)
+        if (existing) {
+          this.cachedHmacSecret = existing
+          return existing
+        }
+
+        const derived = crypto.randomBytes(32).toString('hex')
+        await this.keytar.setPassword(this.KEYTAR_SERVICE, account, derived)
+        this.cachedHmacSecret = derived
+        return derived
+      } catch (error) {
+        this.secureLog('warn', 'Failed to persist HMAC secret to credential store', error)
+      }
+    }
+
+    const fallback = crypto
       .createHash('sha256')
-      .update(`${appName}-${appVersion}-medixpos-license-secret`)
+      .update(`${machine}|${this.encryptionKey ?? ''}|medixpos`)
       .digest('hex')
+    this.cachedHmacSecret = fallback
+    return fallback
   }
 
   /**
@@ -184,7 +239,8 @@ export class LicenseService {
   /**
    * Generate HMAC signature for license data
    */
-  private generateSignature(data: Partial<LicenseConfig>): string {
+  private async generateSignature(data: Partial<LicenseConfig>): Promise<string> {
+    const secret = await this.getHmacSecret()
     const payload = JSON.stringify({
       licenseKey: data.licenseKey,
       activationId: data.activationId,
@@ -192,18 +248,18 @@ export class LicenseService {
       machineId: data.machineId
     })
 
-    return crypto.createHmac('sha256', this.HMAC_SECRET).update(payload).digest('hex')
+    return crypto.createHmac('sha256', secret).update(payload).digest('hex')
   }
 
   /**
    * Verify HMAC signature
    */
-  private verifySignature(data: LicenseConfig): boolean {
+  private async verifySignature(data: LicenseConfig): Promise<boolean> {
     if (!data.signature) {
       return false
     }
 
-    const expectedSignature = this.generateSignature(data)
+    const expectedSignature = await this.generateSignature(data)
     return crypto.timingSafeEqual(Buffer.from(data.signature), Buffer.from(expectedSignature))
   }
 
@@ -251,20 +307,24 @@ export class LicenseService {
     // Check if critical functions are still intact
     if (typeof this.validateLicense !== 'function' || typeof this.verifySignature !== 'function') {
       this.secureLog('error', 'Critical function tampering detected')
-      this.clearLicense()
+      void this.clearLicense()
     }
   }
 
   /**
    * Load license config from encrypted store
    */
-  private loadConfig(): LicenseConfig {
+  private async loadConfig(): Promise<LicenseConfig> {
     try {
-      const config = this.store.store
+      if (!this.store) {
+        return { organizationId: this.ORGANIZATION_ID }
+      }
+
+      const config = this.store.store as LicenseConfig
 
       if (Object.keys(config).length > 0) {
         // Verify signature to ensure data hasn't been tampered with
-        if (config.signature && !this.verifySignature(config)) {
+        if (config.signature && !(await this.verifySignature(config))) {
           this.secureLog('warn', 'License signature verification failed - possible tampering')
           // Clear potentially tampered data
           this.store.clear()
@@ -273,8 +333,8 @@ export class LicenseService {
 
         return config
       }
-    } catch {
-      this.secureLog('error', 'Error loading license config')
+    } catch (error) {
+      this.secureLog('error', 'Error loading license config', error)
     }
 
     return {
@@ -287,18 +347,22 @@ export class LicenseService {
    */
   private async saveConfig(): Promise<void> {
     try {
+      if (!this.store) {
+        throw new Error('License store not initialized')
+      }
+
       // Add machine ID if not present
       if (!this.licenseConfig.machineId) {
         this.licenseConfig.machineId = await this.getMachineId()
       }
 
       // Generate signature
-      this.licenseConfig.signature = this.generateSignature(this.licenseConfig)
+      this.licenseConfig.signature = await this.generateSignature(this.licenseConfig)
 
       // Save to encrypted store
       this.store.store = this.licenseConfig
-    } catch {
-      this.secureLog('error', 'Error saving license config')
+    } catch (error) {
+      this.secureLog('error', 'Error saving license config', error)
     }
   }
 
@@ -311,6 +375,7 @@ export class LicenseService {
     activationId?: string
   ): Promise<LicenseValidationResponse> {
     try {
+      await this.whenReady()
       const keyToValidate = licenseKey || this.licenseConfig.licenseKey
       const activationToValidate = activationId || this.licenseConfig.activationId
 
@@ -411,7 +476,7 @@ export class LicenseService {
       const isExpired = data.expiresAt && new Date(data.expiresAt) < new Date()
       const usageLimitExceeded = data.limitUsage !== null && data.usage >= data.limitUsage
 
-      let status: 'active' | 'expired' | 'invalid' | 'inactive' = 'active'
+      let status: LicenseStatus = 'active'
       let message = 'License is valid and active'
 
       if (isExpired) {
@@ -468,6 +533,7 @@ export class LicenseService {
     label?: string
   ): Promise<{ success: boolean; activationId?: string; message?: string }> {
     try {
+      await this.whenReady()
       // Get machine ID for hardware binding
       const currentMachineId = await this.getMachineId()
 
@@ -513,6 +579,7 @@ export class LicenseService {
    */
   public async deactivateLicense(): Promise<{ success: boolean; message?: string }> {
     try {
+      await this.whenReady()
       if (!this.licenseConfig.licenseKey || !this.licenseConfig.activationId) {
         return {
           success: false,
@@ -528,7 +595,7 @@ export class LicenseService {
       })
 
       // Clear license config
-      this.clearLicense()
+      await this.clearLicense()
 
       this.secureLog('info', 'License deactivated successfully')
 
@@ -582,17 +649,22 @@ export class LicenseService {
   /**
    * Clear license (for removing license)
    */
-  public clearLicense(): void {
+  public async clearLicense(): Promise<void> {
+    await this.whenReady()
     this.licenseConfig = {
       organizationId: this.ORGANIZATION_ID
     }
-    this.store.clear()
+    this.cachedHmacSecret = null
+    if (this.store) {
+      this.store.clear()
+    }
   }
 
   /**
    * Get machine ID for display/verification
    */
   public async getMachineIdForDisplay(): Promise<string> {
+    await this.whenReady()
     const id = await this.getMachineId()
     // Return first 8 characters for display
     return id.substring(0, 8).toUpperCase()

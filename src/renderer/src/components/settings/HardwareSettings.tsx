@@ -27,13 +27,13 @@ export default function HardwareSettings({
   onSave
 }: HardwareSettingsProps): React.ReactElement {
   const [localSettings, setLocalSettings] = useState({
-    enableBarcodeScanner: settings.enableBarcodeScanner === 'true',
-    barcodeScannerType: settings.barcodeScannerType || 'usb',
-    barcodeScannerPort: settings.barcodeScannerPort || '',
-    enableReceiptPrinter: settings.enableReceiptPrinter === 'true',
-    receiptPrinterName: settings.receiptPrinterName || '',
-    receiptPrinterPaperWidth: settings.receiptPrinterPaperWidth || '80',
-    enableCashDrawer: settings.enableCashDrawer === 'true'
+    enableBarcodeScanner: settings.enable_barcode_scanner === 'true',
+    barcodeScannerType: settings.barcode_scanner_type || 'usb',
+    barcodeScannerPort: settings.barcode_scanner_port || '',
+    enableReceiptPrinter: settings.enable_receipt_printer === 'true',
+    receiptPrinterName: settings.receipt_printer_name || '',
+    receiptPrinterPaperWidth: settings.receipt_printer_paper_width || '80',
+    enableCashDrawer: settings.enable_cash_drawer === 'true'
   })
 
   const [saving, setSaving] = useState(false)
@@ -50,13 +50,13 @@ export default function HardwareSettings({
 
     try {
       await onSave({
-        enableBarcodeScanner: String(localSettings.enableBarcodeScanner),
-        barcodeScannerType: localSettings.barcodeScannerType,
-        barcodeScannerPort: localSettings.barcodeScannerPort,
-        enableReceiptPrinter: String(localSettings.enableReceiptPrinter),
-        receiptPrinterName: localSettings.receiptPrinterName,
-        receiptPrinterPaperWidth: localSettings.receiptPrinterPaperWidth,
-        enableCashDrawer: String(localSettings.enableCashDrawer)
+        enable_barcode_scanner: String(localSettings.enableBarcodeScanner),
+        barcode_scanner_type: localSettings.barcodeScannerType,
+        barcode_scanner_port: localSettings.barcodeScannerPort,
+        enable_receipt_printer: String(localSettings.enableReceiptPrinter),
+        receipt_printer_name: localSettings.receiptPrinterName,
+        receipt_printer_paper_width: localSettings.receiptPrinterPaperWidth,
+        enable_cash_drawer: String(localSettings.enableCashDrawer)
       })
       setMessage({ type: 'success', text: 'Hardware settings saved successfully!' })
     } catch {

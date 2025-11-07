@@ -29,9 +29,10 @@ interface API {
     }>
     activate: (
       licenseKey: string,
-      label?: string
+      label?: string,
+      sessionToken?: string
     ) => Promise<{ success: boolean; activationId?: string; message?: string }>
-    deactivate: () => Promise<{ success: boolean; message?: string }>
+    deactivate: (sessionToken?: string) => Promise<{ success: boolean; message?: string }>
     getInfo: () => Promise<{
       isLicensed: boolean
       status?: string
@@ -41,12 +42,15 @@ interface API {
       limitUsage?: number
     }>
     needsRevalidation: () => Promise<boolean>
-    clear: () => Promise<{ success: boolean; message?: string }>
+    clear: (sessionToken?: string) => Promise<{ success: boolean; message?: string }>
   }
   users: {
     getAll: () => Promise<User[]>
     getById: (id: string) => Promise<User | undefined>
-    authenticate: (username: string, password: string) => Promise<User | undefined>
+    authenticate: (
+      username: string,
+      password: string
+    ) => Promise<(User & { sessionToken: string; mustChangePassword?: boolean }) | null>
     create: (data: Partial<User>) => Promise<User>
     update: (id: string, data: Partial<User>) => Promise<User>
     delete: (id: string) => Promise<void>
@@ -165,7 +169,12 @@ interface API {
   settings: {
     getAll: () => Promise<Record<string, unknown>[]>
     get: (key: string) => Promise<Record<string, unknown>>
-    update: (key: string, value: string) => Promise<Record<string, unknown>>
+    update: (
+      key: string,
+      value: string,
+      userId?: string | null,
+      username?: string | null
+    ) => Promise<Record<string, unknown>>
   }
   reports: {
     salesSummary: (startDate: string, endDate: string) => Promise<Record<string, unknown>>
@@ -231,6 +240,9 @@ interface API {
       isFirstSetup: boolean
     } | null>
     clearInitialCredentials: () => Promise<{ success: boolean }>
+  }
+  auth: {
+    invalidateSession: (token: string | null | undefined) => Promise<{ success: boolean }>
   }
 }
 

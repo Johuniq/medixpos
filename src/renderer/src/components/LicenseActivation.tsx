@@ -20,6 +20,7 @@ import {
 } from '@mui/material'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
+import { useAuthStore } from '../store/authStore'
 
 interface LicenseActivationProps {
   open: boolean
@@ -37,6 +38,7 @@ export default function LicenseActivation({
   const [licenseKey, setLicenseKey] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const sessionToken = useAuthStore((state) => state.sessionToken)
 
   const handleActivate = async (): Promise<void> => {
     if (!licenseKey.trim()) {
@@ -49,7 +51,11 @@ export default function LicenseActivation({
 
     try {
       // First, try to activate the license (if activation limits are enabled)
-      const activateResult = await window.api.license.activate(licenseKey.trim())
+      const activateResult = await window.api.license.activate(
+        licenseKey.trim(),
+        undefined,
+        sessionToken ?? undefined
+      )
 
       if (!activateResult.success) {
         // If activation failed, it might not require activation
