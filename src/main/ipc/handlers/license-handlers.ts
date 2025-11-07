@@ -5,10 +5,9 @@
  */
 
 import { ipcMain } from 'electron'
-import { initDatabase } from '../../database'
+import { initializeBackend, isBackendInitialized } from '../../backend-initializer'
 import { sessionManager } from '../../security/session-manager'
 import { LicenseService } from '../../services/license'
-import { registerDatabaseHandlers } from '../database-handlers'
 
 export function registerLicenseHandlers(): void {
   const licenseService = LicenseService.getInstance()
@@ -21,11 +20,10 @@ export function registerLicenseHandlers(): void {
       const result = await licenseService.validateLicense(licenseKey, activationId)
 
       // If validation successful and database not initialized yet, initialize it now
-      if (result.valid) {
+      if (result.valid && !isBackendInitialized()) {
         try {
           console.log('License validated successfully. Initializing backend...')
-          await initDatabase()
-          registerDatabaseHandlers()
+          await initializeBackend()
           console.log('Backend initialized successfully')
         } catch (dbError) {
           console.error('Failed to initialize backend after license validation:', dbError)

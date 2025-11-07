@@ -8,8 +8,7 @@ import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from 'electron'
 import fs from 'fs'
 import path, { join } from 'path'
-import { initDatabase } from './database'
-import { registerDatabaseHandlers } from './ipc/database-handlers'
+import { initializeBackend } from './backend-initializer'
 import { registerLicenseHandlers } from './ipc/handlers/license-handlers'
 import { LicenseService } from './services/license'
 
@@ -162,6 +161,7 @@ app.whenReady().then(async () => {
 
     // Check for valid license before initializing backend
     const licenseService = LicenseService.getInstance()
+    await licenseService.whenReady()
     const licenseInfo = licenseService.getLicenseInfo()
 
     // If there's a stored license, validate it
@@ -174,11 +174,8 @@ app.whenReady().then(async () => {
         // License is invalid, but don't block - let frontend show activation dialog
         // We'll only register database handlers after successful validation
       } else {
-        // Initialize database
-        await initDatabase()
-
-        // Register database IPC handlers
-        registerDatabaseHandlers()
+        // Initialize backend once
+        await initializeBackend()
         console.log('Database handlers registered')
       }
     } else {

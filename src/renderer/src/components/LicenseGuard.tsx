@@ -63,8 +63,7 @@ export default function LicenseGuard({ children }: LicenseGuardProps): React.JSX
     setNeedsActivation(false)
     setLicenseValid(true)
 
-    // Restart the app to properly initialize the database
-    // This ensures initial credentials are created and available
+    // Refresh renderer so it can load backend resources
     setTimeout(() => {
       window.location.reload()
     }, 500)
