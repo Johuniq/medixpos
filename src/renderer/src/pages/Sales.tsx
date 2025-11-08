@@ -7,6 +7,7 @@
 import { Box, Container, Typography } from '@mui/material'
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
+import ExportModal from '../components/export/ExportModal'
 import SaleDetailsModal from '../components/sales/SaleDetailsModal'
 import SaleReturnModal from '../components/sales/SaleReturnModal'
 import SalesFilters from '../components/sales/SalesFilters'
@@ -21,10 +22,14 @@ export default function Sales(): React.JSX.Element {
   const [sales, setSales] = useState<Sale[]>([])
   const [filteredSales, setFilteredSales] = useState<Sale[]>([])
   const [searchTerm, setSearchTerm] = useState('')
+  const [page, setPage] = useState(1)
+  const [totalRecords, setTotalRecords] = useState(0)
+  const [limit] = useState(50)
   const [statusFilter, setStatusFilter] = useState('all')
   const [paymentFilter, setPaymentFilter] = useState('all')
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [showReturnModal, setShowReturnModal] = useState(false)
+  const [showExportModal, setShowExportModal] = useState(false)
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null)
   const [saleItems, setSaleItems] = useState<SaleItem[]>([])
   const [accounts, setAccounts] = useState<BankAccount[]>([])
@@ -66,20 +71,35 @@ export default function Sales(): React.JSX.Element {
   useEffect(() => {
     loadSales()
     loadAccounts()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, searchTerm])
 
   useEffect(() => {
     filterSales()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sales, searchTerm, statusFilter, paymentFilter])
+  }, [sales, statusFilter, paymentFilter])
 
   const loadSales = async (): Promise<void> => {
     try {
-      const allSales = await window.api.sales.getAll()
-      setSales(allSales as unknown as Sale[])
+      const response = await window.api.sales.getPaginated({
+        page,
+        limit,
+        search: searchTerm
+      })
+      setSales(response.data as unknown as Sale[])
+      setTotalRecords(response.total)
     } catch {
       toast.error('Failed to load sales')
     }
+  }
+
+  const handleSearchChange = (search: string): void => {
+    setSearchTerm(search)
+    setPage(1)
+  }
+
+  const handlePageChange = (newPage: number): void => {
+    setPage(newPage)
   }
 
   const loadAccounts = async (): Promise<void> => {
@@ -498,10 +518,11 @@ export default function Sales(): React.JSX.Element {
           searchTerm={searchTerm}
           statusFilter={statusFilter}
           paymentFilter={paymentFilter}
-          onSearchChange={setSearchTerm}
+          onSearchChange={handleSearchChange}
           onStatusFilterChange={setStatusFilter}
           onPaymentFilterChange={setPaymentFilter}
           onReturnClick={() => setShowReturnModal(true)}
+          onExportClick={() => setShowExportModal(true)}
         />
       </div>
 
@@ -512,6 +533,10 @@ export default function Sales(): React.JSX.Element {
           currencySymbol={getCurrencySymbol()}
           onViewDetails={viewSaleDetails}
           onPrint={handlePrint}
+          page={page}
+          totalRecords={totalRecords}
+          limit={limit}
+          onServerPageChange={handlePageChange}
         />
       </div>
 
@@ -540,6 +565,13 @@ export default function Sales(): React.JSX.Element {
         onReturnFormDataChange={setReturnFormData}
         onReturnItemsChange={setReturnItems}
         onSaleSelect={handleSaleSelect}
+      />
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        defaultExportType="sales"
       />
     </Container>
   )

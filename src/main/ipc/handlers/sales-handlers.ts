@@ -4,12 +4,28 @@
  * Unauthorized use, copying, or distribution is strictly prohibited.
  */
 
-import { and, desc, eq, gte, lte, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, like, lte, or, sql, SQL } from 'drizzle-orm'
 import { ipcMain } from 'electron'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../../database'
 import * as schema from '../../database/schema'
 import { createAuditLog } from '../utils/audit-logger'
+
+interface PaginationParams {
+  page?: number
+  limit?: number
+  startDate?: string
+  endDate?: string
+  search?: string
+}
+
+interface PaginatedResponse<T> {
+  data: T[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
 
 export function registerSalesHandlers(): void {
   const db = getDatabase()
@@ -18,102 +34,205 @@ export function registerSalesHandlers(): void {
 
   // Create new sale
   ipcMain.handle('db:sales:create', async (_, { sale, items }) => {
-    const saleId = uuidv4()
-    const saleResult = db
-      .insert(schema.sales)
-      .values({ id: saleId, ...sale })
-      .returning()
-      .get()
+    // Wrap entire sale creation in a transaction to ensure atomicity
+    return db.transaction((tx) => {
+      try {
+        const saleId = uuidv4()
+        const saleResult = tx
+          .insert(schema.sales)
+          .values({ id: saleId, ...sale })
+          .returning()
+          .get()
 
-    // Insert sale items
-    const saleItemsData = items.map((item) => ({
-      id: uuidv4(),
-      saleId,
-      ...item
-    }))
+        // Insert sale items
+        const saleItemsData = items.map((item) => ({
+          id: uuidv4(),
+          saleId,
+          ...item
+        }))
 
-    if (saleItemsData.length > 0) {
-      db.insert(schema.saleItems).values(saleItemsData).run()
-    }
+        if (saleItemsData.length > 0) {
+          tx.insert(schema.saleItems).values(saleItemsData).run()
+        }
 
-    // Update inventory
-    for (const item of items) {
-      db.run(
-        sql`UPDATE inventory SET quantity = quantity - ${item.quantity} 
-            WHERE product_id = ${item.productId}`
-      )
-    }
+        // Update inventory - check for sufficient stock first
+        for (const item of items) {
+          const inventory = tx
+            .select()
+            .from(schema.inventory)
+            .where(eq(schema.inventory.productId, item.productId))
+            .get()
 
-    // Update bank account balance if accountId is provided (add money from sale)
-    if (sale.accountId && sale.paidAmount > 0) {
-      const account = db
-        .select()
-        .from(schema.bankAccounts)
-        .where(eq(schema.bankAccounts.id, sale.accountId))
-        .get()
+          if (!inventory) {
+            throw new Error(`Inventory record not found for product ${item.productId}`)
+          }
 
-      if (account) {
-        const currentBalance = account.currentBalance ?? 0
-        const totalDeposits = account.totalDeposits ?? 0
+          if (inventory.quantity < item.quantity) {
+            const product = tx
+              .select()
+              .from(schema.products)
+              .where(eq(schema.products.id, item.productId))
+              .get()
+            throw new Error(
+              `Insufficient stock for ${product?.name || 'product'}. Available: ${inventory.quantity}, Required: ${item.quantity}`
+            )
+          }
 
-        db.update(schema.bankAccounts)
-          .set({
-            currentBalance: currentBalance + sale.paidAmount,
-            totalDeposits: totalDeposits + sale.paidAmount,
-            updatedAt: new Date().toISOString()
-          })
-          .where(eq(schema.bankAccounts.id, sale.accountId))
-          .run()
+          tx.run(
+            sql`UPDATE inventory SET quantity = quantity - ${item.quantity} 
+                WHERE product_id = ${item.productId}`
+          )
+        }
+
+        // Update bank account balance if accountId is provided (add money from sale)
+        if (sale.accountId && sale.paidAmount > 0) {
+          const account = tx
+            .select()
+            .from(schema.bankAccounts)
+            .where(eq(schema.bankAccounts.id, sale.accountId))
+            .get()
+
+          if (!account) {
+            throw new Error(`Bank account not found: ${sale.accountId}`)
+          }
+
+          const currentBalance = account.currentBalance ?? 0
+          const totalDeposits = account.totalDeposits ?? 0
+
+          tx.update(schema.bankAccounts)
+            .set({
+              currentBalance: currentBalance + sale.paidAmount,
+              totalDeposits: totalDeposits + sale.paidAmount,
+              updatedAt: new Date().toISOString()
+            })
+            .where(eq(schema.bankAccounts.id, sale.accountId))
+            .run()
+        }
+
+        // Update customer loyalty points and total purchases if customer is linked
+        if (sale.customerId) {
+          const customer = tx
+            .select()
+            .from(schema.customers)
+            .where(eq(schema.customers.id, sale.customerId))
+            .get()
+
+          if (customer) {
+            const currentLoyaltyPoints = customer.loyaltyPoints ?? 0
+            const currentTotalPurchases = customer.totalPurchases ?? 0
+            const pointsRedeemed = sale.pointsRedeemed ?? 0
+
+            // Calculate the amount on which new points should be earned
+            // This should be the final amount paid (totalAmount) which already has points discount applied
+            // So we earn points on what customer actually paid
+            const newPointsEarned = Math.floor(sale.totalAmount / 10)
+
+            // Calculate final points: (current - redeemed) + earned
+            // First deduct redeemed points, then add newly earned points
+            const finalPoints = Math.max(0, currentLoyaltyPoints - pointsRedeemed + newPointsEarned)
+
+            tx.update(schema.customers)
+              .set({
+                loyaltyPoints: finalPoints,
+                totalPurchases: currentTotalPurchases + sale.totalAmount,
+                updatedAt: new Date().toISOString()
+              })
+              .where(eq(schema.customers.id, sale.customerId))
+              .run()
+          }
+        }
+
+        // Create audit log
+        createAuditLog(tx, {
+          userId: sale.userId,
+          action: 'create',
+          entityType: 'sale',
+          entityId: saleId,
+          entityName: saleResult.invoiceNumber,
+          changes: { totalAmount: sale.totalAmount, items: items.length }
+        })
+
+        return saleResult
+      } catch (error) {
+        // Transaction will automatically rollback on error
+        console.error('[Sales] Transaction failed, rolling back:', error)
+        throw error
       }
-    }
-
-    // Update customer loyalty points and total purchases if customer is linked
-    if (sale.customerId) {
-      const customer = db
-        .select()
-        .from(schema.customers)
-        .where(eq(schema.customers.id, sale.customerId))
-        .get()
-
-      if (customer) {
-        const currentLoyaltyPoints = customer.loyaltyPoints ?? 0
-        const currentTotalPurchases = customer.totalPurchases ?? 0
-        const pointsRedeemed = sale.pointsRedeemed ?? 0
-
-        // Calculate the amount on which new points should be earned
-        // This should be the final amount paid (totalAmount) which already has points discount applied
-        // So we earn points on what customer actually paid
-        const newPointsEarned = Math.floor(sale.totalAmount / 10)
-
-        // Calculate final points: (current - redeemed) + earned
-        // First deduct redeemed points, then add newly earned points
-        const finalPoints = Math.max(0, currentLoyaltyPoints - pointsRedeemed + newPointsEarned)
-
-        db.update(schema.customers)
-          .set({
-            loyaltyPoints: finalPoints,
-            totalPurchases: currentTotalPurchases + sale.totalAmount,
-            updatedAt: new Date().toISOString()
-          })
-          .where(eq(schema.customers.id, sale.customerId))
-          .run()
-      }
-    }
-
-    // Create audit log
-    createAuditLog(db, {
-      userId: sale.userId,
-      action: 'create',
-      entityType: 'sale',
-      entityId: saleId,
-      entityName: saleResult.invoiceNumber,
-      changes: { totalAmount: sale.totalAmount, items: items.length }
     })
-
-    return saleResult
   })
 
-  // Get all sales (with optional date range)
+  // Get paginated sales
+  ipcMain.handle(
+    'db:sales:getPaginated',
+    async (_, params: PaginationParams): Promise<PaginatedResponse<unknown>> => {
+      const page = params.page || 1
+      const limit = params.limit || 50
+      const offset = (page - 1) * limit
+      const { startDate, endDate, search } = params
+
+      // Build where conditions
+      const conditions: SQL<unknown>[] = []
+      if (startDate && endDate) {
+        conditions.push(
+          and(gte(schema.sales.createdAt, startDate), lte(schema.sales.createdAt, endDate))!
+        )
+      }
+      if (search) {
+        conditions.push(
+          sql`(${schema.sales.invoiceNumber} LIKE ${`%${search}%`} OR ${schema.customers.name} LIKE ${`%${search}%`})`
+        )
+      }
+
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined
+
+      // Get total count
+      const countQuery = db
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.sales)
+        .leftJoin(schema.customers, eq(schema.sales.customerId, schema.customers.id))
+
+      const countResult = whereClause ? countQuery.where(whereClause).get() : countQuery.get()
+      const total = countResult?.count || 0
+
+      // Get paginated data
+      const dataQuery = db
+        .select({
+          id: schema.sales.id,
+          invoiceNumber: schema.sales.invoiceNumber,
+          customerId: schema.sales.customerId,
+          customerName: schema.customers.name,
+          accountId: schema.sales.accountId,
+          userId: schema.sales.userId,
+          subtotal: schema.sales.subtotal,
+          taxAmount: schema.sales.taxAmount,
+          discountAmount: schema.sales.discountAmount,
+          totalAmount: schema.sales.totalAmount,
+          paidAmount: schema.sales.paidAmount,
+          changeAmount: schema.sales.changeAmount,
+          paymentMethod: schema.sales.paymentMethod,
+          status: schema.sales.status,
+          notes: schema.sales.notes,
+          createdAt: schema.sales.createdAt
+        })
+        .from(schema.sales)
+        .leftJoin(schema.customers, eq(schema.sales.customerId, schema.customers.id))
+        .orderBy(desc(schema.sales.createdAt))
+        .limit(limit)
+        .offset(offset)
+
+      const data = whereClause ? dataQuery.where(whereClause).all() : dataQuery.all()
+
+      return {
+        data,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    }
+  )
+
+  // Get all sales (with optional date range) - kept for backward compatibility
   ipcMain.handle('db:sales:getAll', async (_, { startDate, endDate }) => {
     if (startDate && endDate) {
       return db
@@ -389,6 +508,107 @@ export function registerSalesHandlers(): void {
 
     return returnResult
   })
+
+  // Get paginated sales returns
+  ipcMain.handle(
+    'db:salesReturns:getPaginated',
+    async (
+      _,
+      {
+        page = 1,
+        limit = 50,
+        search,
+        startDate,
+        endDate
+      }: {
+        page?: number
+        limit?: number
+        search?: string
+        startDate?: string
+        endDate?: string
+      } = {}
+    ) => {
+      try {
+        // Build conditions
+        const conditions: SQL<unknown>[] = []
+
+        if (startDate) {
+          conditions.push(gte(schema.salesReturns.createdAt, startDate))
+        }
+
+        if (endDate) {
+          conditions.push(lte(schema.salesReturns.createdAt, endDate))
+        }
+
+        if (search) {
+          conditions.push(
+            or(
+              like(schema.salesReturns.returnNumber, `%${search}%`),
+              like(schema.customers.name, `%${search}%`),
+              like(schema.sales.invoiceNumber, `%${search}%`)
+            )!
+          )
+        }
+
+        // Get total count
+        const countQuery = db
+          .select({ count: sql<number>`count(*)` })
+          .from(schema.salesReturns)
+          .leftJoin(schema.customers, eq(schema.salesReturns.customerId, schema.customers.id))
+          .leftJoin(schema.sales, eq(schema.salesReturns.saleId, schema.sales.id))
+
+        const totalResult =
+          conditions.length > 0 ? countQuery.where(and(...conditions)!).get() : countQuery.get()
+
+        const total = totalResult?.count || 0
+
+        // Get paginated data
+        const offset = (page - 1) * limit
+        const dataQuery = db
+          .select({
+            salesReturn: schema.salesReturns,
+            customer: {
+              id: schema.customers.id,
+              name: schema.customers.name
+            },
+            sale: {
+              id: schema.sales.id,
+              invoiceNumber: schema.sales.invoiceNumber
+            },
+            user: {
+              id: schema.users.id,
+              username: schema.users.username
+            },
+            account: {
+              id: schema.bankAccounts.id,
+              name: schema.bankAccounts.name
+            }
+          })
+          .from(schema.salesReturns)
+          .leftJoin(schema.customers, eq(schema.salesReturns.customerId, schema.customers.id))
+          .leftJoin(schema.sales, eq(schema.salesReturns.saleId, schema.sales.id))
+          .leftJoin(schema.users, eq(schema.salesReturns.userId, schema.users.id))
+          .leftJoin(schema.bankAccounts, eq(schema.salesReturns.accountId, schema.bankAccounts.id))
+          .orderBy(desc(schema.salesReturns.createdAt))
+          .limit(limit)
+          .offset(offset)
+
+        const data =
+          conditions.length > 0 ? dataQuery.where(and(...conditions)!).all() : dataQuery.all()
+
+        return {
+          data,
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit)
+        }
+      } catch (error) {
+        console.error('Error fetching paginated sales returns:', error)
+        throw error
+      }
+    }
+  )
 
   // Get all sales returns (with optional date range)
   ipcMain.handle('db:salesReturns:getAll', async (_, { startDate, endDate }) => {

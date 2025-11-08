@@ -43,6 +43,14 @@ export default function ReportFilters({
               <MenuItem value="sales">Sales Report</MenuItem>
               <MenuItem value="inventory">Inventory Report</MenuItem>
               <MenuItem value="customer">Customer Report</MenuItem>
+              <MenuItem value="profitMargin">Profit Margin Analysis</MenuItem>
+              <MenuItem value="vendorPerformance">Vendor Performance</MenuItem>
+              <MenuItem value="employeePerformance">Employee Performance</MenuItem>
+              <MenuItem value="slowMovingStock">Slow Moving Stock</MenuItem>
+              <MenuItem value="paymentMethod">Payment Method Analysis</MenuItem>
+              <MenuItem value="peakHours">Peak Hours Analysis</MenuItem>
+              <MenuItem value="customerRFM">Customer RFM Analysis</MenuItem>
+              <MenuItem value="yearOverYear">Year-over-Year Comparison</MenuItem>
             </Select>
           </FormControl>
 

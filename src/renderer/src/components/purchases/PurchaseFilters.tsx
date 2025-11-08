@@ -4,7 +4,7 @@
  * Unauthorized use, copying, or distribution is strictly prohibited.
  */
 
-import { Add, AssignmentReturn, Search } from '@mui/icons-material'
+import { Add, AssignmentReturn, CloudDownload, Search } from '@mui/icons-material'
 import {
   Box,
   Button,
@@ -26,6 +26,7 @@ interface PurchaseFiltersProps {
   onPaymentFilterChange: (value: string) => void
   onAddPurchase: () => void
   onPurchaseReturn: () => void
+  onExportClick: () => void
 }
 
 export default function PurchaseFilters({
@@ -36,7 +37,8 @@ export default function PurchaseFilters({
   onStatusFilterChange,
   onPaymentFilterChange,
   onAddPurchase,
-  onPurchaseReturn
+  onPurchaseReturn,
+  onExportClick
 }: PurchaseFiltersProps): React.JSX.Element {
   return (
     <Paper sx={{ p: 2, mb: 3 }}>
@@ -103,6 +105,9 @@ export default function PurchaseFilters({
         </Box>
 
         <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button variant="outlined" startIcon={<CloudDownload />} onClick={onExportClick}>
+            Export Data
+          </Button>
           <Button variant="contained" startIcon={<Add />} onClick={onAddPurchase}>
             New Purchase
           </Button>

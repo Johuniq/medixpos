@@ -11,10 +11,69 @@ import { getDatabase } from '../../database'
 import * as schema from '../../database/schema'
 import { createAuditLog } from '../utils/audit-logger'
 
+interface PaginationParams {
+  page?: number
+  limit?: number
+  search?: string
+}
+
+interface PaginatedResponse<T> {
+  data: T[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
 export function registerCustomerHandlers(): void {
   const db = getDatabase()
 
-  // Get all active customers (with optional search)
+  // Get paginated customers
+  ipcMain.handle(
+    'db:customers:getPaginated',
+    async (_, params: PaginationParams): Promise<PaginatedResponse<unknown>> => {
+      const page = params.page || 1
+      const limit = params.limit || 50
+      const offset = (page - 1) * limit
+      const search = params.search?.trim()
+
+      // Build where clause
+      const whereClause = search
+        ? and(
+            eq(schema.customers.isActive, true),
+            sql`(${schema.customers.name} LIKE ${`%${search}%`} OR ${schema.customers.phone} LIKE ${`%${search}%`})`
+          )
+        : eq(schema.customers.isActive, true)
+
+      // Get total count
+      const countResult = db
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.customers)
+        .where(whereClause)
+        .get()
+
+      const total = countResult?.count || 0
+
+      // Get paginated data
+      const data = db
+        .select()
+        .from(schema.customers)
+        .where(whereClause)
+        .limit(limit)
+        .offset(offset)
+        .all()
+
+      return {
+        data,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    }
+  )
+
+  // Get all active customers (with optional search) - kept for backward compatibility
   ipcMain.handle('db:customers:getAll', async (_, search?: string) => {
     if (search) {
       return db
@@ -71,6 +130,18 @@ export function registerCustomerHandlers(): void {
   ipcMain.handle('db:customers:update', async (_, { id, data }) => {
     const oldCustomer = db.select().from(schema.customers).where(eq(schema.customers.id, id)).get()
 
+    if (!oldCustomer) {
+      throw new Error('Customer not found')
+    }
+
+    // Optimistic locking: Check version
+    const currentVersion = data.version || oldCustomer.version
+    if (currentVersion !== oldCustomer.version) {
+      throw new Error(
+        'CONCURRENT_EDIT: This customer was modified by another user. Please refresh and try again.'
+      )
+    }
+
     // Transform status to isActive (boolean)
     const isActive = data.status === 'active'
 
@@ -82,6 +153,7 @@ export function registerCustomerHandlers(): void {
       address: data.address || null,
       dateOfBirth: data.dateOfBirth || null,
       isActive,
+      version: oldCustomer.version + 1,
       updatedAt: new Date().toISOString()
     }
 
@@ -95,7 +167,7 @@ export function registerCustomerHandlers(): void {
     const changes: Record<string, { old: unknown; new: unknown }> = {}
     if (oldCustomer) {
       Object.keys(updateData).forEach((key) => {
-        if (oldCustomer[key] !== updateData[key]) {
+        if (key !== 'version' && oldCustomer[key] !== updateData[key]) {
           changes[key] = { old: oldCustomer[key], new: updateData[key] }
         }
       })

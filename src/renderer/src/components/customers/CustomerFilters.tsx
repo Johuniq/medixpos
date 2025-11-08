@@ -4,7 +4,7 @@
  * Unauthorized use, copying, or distribution is strictly prohibited.
  */
 
-import { Add, Search } from '@mui/icons-material'
+import { Add, CloudDownload, Search } from '@mui/icons-material'
 import {
   Box,
   Button,
@@ -23,6 +23,7 @@ interface CustomerFiltersProps {
   onSearchChange: (value: string) => void
   onStatusFilterChange: (value: string) => void
   onAddClick: () => void
+  onExportClick: () => void
 }
 
 export default function CustomerFilters({
@@ -30,8 +31,9 @@ export default function CustomerFilters({
   statusFilter,
   onSearchChange,
   onStatusFilterChange,
-  onAddClick
-}: CustomerFiltersProps) {
+  onAddClick,
+  onExportClick
+}: CustomerFiltersProps): React.JSX.Element {
   return (
     <Paper
       elevation={0}
@@ -91,15 +93,25 @@ export default function CustomerFilters({
           </FormControl>
         </Box>
 
-        {/* Add Button */}
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={onAddClick}
-          sx={{ whiteSpace: 'nowrap' }}
-        >
-          Add Customer
-        </Button>
+        {/* Action Buttons */}
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="outlined"
+            startIcon={<CloudDownload />}
+            onClick={onExportClick}
+            sx={{ whiteSpace: 'nowrap' }}
+          >
+            Export Data
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            onClick={onAddClick}
+            sx={{ whiteSpace: 'nowrap' }}
+          >
+            Add Customer
+          </Button>
+        </Box>
       </Box>
     </Paper>
   )

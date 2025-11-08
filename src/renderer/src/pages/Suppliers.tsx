@@ -7,6 +7,7 @@
 import { Container } from '@mui/material'
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
+import ExportModal from '../components/export/ExportModal'
 import PaymentModal, { generatePaymentPDF } from '../components/suppliers/PaymentModal'
 import SupplierFormModal from '../components/suppliers/SupplierFormModal'
 import SupplierHeader from '../components/suppliers/SupplierHeader'
@@ -31,11 +32,17 @@ export default function Suppliers(): React.JSX.Element {
   const [searchTerm, setSearchTerm] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [showExportModal, setShowExportModal] = useState(false)
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null)
   const [payingSupplier, setPayingSupplier] = useState<Supplier | null>(null)
   const [loading, setLoading] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(25)
+
+  // Pagination state
+  const [page, setPage] = useState(1)
+  const [totalRecords, setTotalRecords] = useState(0)
+  const [limit] = useState(50)
 
   const [formData, setFormData] = useState<SupplierFormData>({
     name: '',
@@ -59,18 +66,20 @@ export default function Suppliers(): React.JSX.Element {
 
   useEffect(() => {
     loadData()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, searchTerm])
 
   const loadData = async (): Promise<void> => {
     try {
       setLoading(true)
-      const [suppliersData, accountsData] = await Promise.all([
-        window.api.suppliers.getAll(),
+      const [suppliersResponse, accountsData] = await Promise.all([
+        window.api.suppliers.getPaginated({ page, limit, search: searchTerm }),
         window.api.bankAccounts.getAll()
       ])
-      const typedSuppliers = suppliersData as unknown as Supplier[]
+      const typedSuppliers = suppliersResponse.data as unknown as Supplier[]
       const typedAccounts = accountsData as unknown as BankAccount[]
       setSuppliers(typedSuppliers)
+      setTotalRecords(suppliersResponse.total)
       setBankAccounts(typedAccounts)
     } catch (error) {
       console.error('Failed to load suppliers:', error)
@@ -80,13 +89,16 @@ export default function Suppliers(): React.JSX.Element {
     }
   }
 
-  const filteredSuppliers = suppliers.filter(
-    (supplier) =>
-      supplier.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      supplier.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (supplier.phone && supplier.phone.includes(searchTerm)) ||
-      (supplier.email && supplier.email.toLowerCase().includes(searchTerm.toLowerCase()))
-  )
+  const handleSearchChange = (search: string): void => {
+    setSearchTerm(search)
+    setPage(1)
+  }
+
+  const handlePageChange = (newPage: number): void => {
+    setPage(newPage)
+  }
+
+  const filteredSuppliers = suppliers
 
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault()
@@ -102,7 +114,8 @@ export default function Suppliers(): React.JSX.Element {
         ...formData,
         openingBalance: parseFloat(formData.openingBalance) || 0,
         creditLimit: parseFloat(formData.creditLimit) || 0,
-        creditDays: parseInt(formData.creditDays) || 0
+        creditDays: parseInt(formData.creditDays) || 0,
+        ...(editingSupplier && { version: editingSupplier.version }) // Include version for optimistic locking
       }
 
       if (editingSupplier) {
@@ -116,7 +129,14 @@ export default function Suppliers(): React.JSX.Element {
       loadData()
     } catch (error) {
       console.error('Failed to save supplier:', error)
-      toast.error(editingSupplier ? 'Failed to update supplier' : 'Failed to create supplier')
+      // Handle concurrent edit error
+      if (error instanceof Error && error.message.includes('CONCURRENT_EDIT')) {
+        toast.error('This supplier was modified by another user. Please refresh and try again.')
+        loadData() // Auto-refresh the data
+        handleCloseModal()
+      } else {
+        toast.error(editingSupplier ? 'Failed to update supplier' : 'Failed to create supplier')
+      }
     } finally {
       setLoading(false)
     }
@@ -281,11 +301,6 @@ export default function Suppliers(): React.JSX.Element {
     setFormData({ ...formData, code })
   }
 
-  const handleSearchChange = (value: string): void => {
-    setSearchTerm(value)
-    setCurrentPage(1)
-  }
-
   const handleFormChange = (data: Partial<SupplierFormData>): void => {
     setFormData({ ...formData, ...data })
   }
@@ -312,6 +327,7 @@ export default function Suppliers(): React.JSX.Element {
           searchTerm={searchTerm}
           onSearchChange={handleSearchChange}
           onAddClick={() => setShowModal(true)}
+          onExportClick={() => setShowExportModal(true)}
         />
       </div>
 
@@ -327,6 +343,10 @@ export default function Suppliers(): React.JSX.Element {
           onEdit={handleEdit}
           onDelete={handleDelete}
           onRecordPayment={handleRecordPayment}
+          page={page}
+          totalRecords={totalRecords}
+          limit={limit}
+          onServerPageChange={handlePageChange}
         />
       </div>
 
@@ -358,6 +378,13 @@ export default function Suppliers(): React.JSX.Element {
         onClose={handleClosePaymentModal}
         onSubmit={handlePaymentSubmit}
         onPaymentDataChange={handlePaymentDataChange}
+      />
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        defaultExportType="suppliers"
       />
     </Container>
   )

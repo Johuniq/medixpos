@@ -4,7 +4,7 @@
  * Unauthorized use, copying, or distribution is strictly prohibited.
  */
 
-import { desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, like, or, sql, SQL } from 'drizzle-orm'
 import { ipcMain } from 'electron'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../../database'
@@ -13,6 +13,93 @@ import { createAuditLog } from '../utils/audit-logger'
 
 export function registerPrescriptionHandlers(): void {
   const db = getDatabase()
+
+  // Get paginated prescriptions
+  ipcMain.handle(
+    'db:prescriptions:getPaginated',
+    async (
+      _,
+      {
+        page = 1,
+        limit = 50,
+        search,
+        customerId
+      }: {
+        page?: number
+        limit?: number
+        search?: string
+        customerId?: string
+      } = {}
+    ) => {
+      try {
+        // Build conditions
+        const conditions: SQL<unknown>[] = []
+
+        if (customerId) {
+          conditions.push(eq(schema.prescriptions.customerId, customerId))
+        }
+
+        if (search) {
+          conditions.push(
+            or(
+              like(schema.prescriptions.prescriptionNumber, `%${search}%`),
+              like(schema.prescriptions.doctorName, `%${search}%`),
+              like(schema.customers.name, `%${search}%`),
+              like(schema.customers.phone, `%${search}%`)
+            )!
+          )
+        }
+
+        // Get total count
+        const countQuery = db
+          .select({ count: sql<number>`count(*)` })
+          .from(schema.prescriptions)
+          .leftJoin(schema.customers, eq(schema.prescriptions.customerId, schema.customers.id))
+
+        const totalResult =
+          conditions.length > 0 ? countQuery.where(and(...conditions)!).get() : countQuery.get()
+
+        const total = totalResult?.count || 0
+
+        // Get paginated data
+        const offset = (page - 1) * limit
+        const dataQuery = db
+          .select({
+            prescription: schema.prescriptions,
+            customer: {
+              id: schema.customers.id,
+              name: schema.customers.name,
+              phone: schema.customers.phone
+            },
+            sale: {
+              id: schema.sales.id,
+              invoiceNumber: schema.sales.invoiceNumber,
+              totalAmount: schema.sales.totalAmount
+            }
+          })
+          .from(schema.prescriptions)
+          .leftJoin(schema.customers, eq(schema.prescriptions.customerId, schema.customers.id))
+          .leftJoin(schema.sales, eq(schema.prescriptions.saleId, schema.sales.id))
+          .orderBy(desc(schema.prescriptions.createdAt))
+          .limit(limit)
+          .offset(offset)
+
+        const data =
+          conditions.length > 0 ? dataQuery.where(and(...conditions)!).all() : dataQuery.all()
+
+        return {
+          data,
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit)
+        }
+      } catch (error) {
+        console.error('Error fetching paginated prescriptions:', error)
+        throw error
+      }
+    }
+  )
 
   // Get all prescriptions (with optional customer filter)
   ipcMain.handle('db:prescriptions:getAll', async (_, customerId?: string) => {

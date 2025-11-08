@@ -14,6 +14,7 @@ export interface Customer {
   loyaltyPoints: number
   totalPurchases: number
   status: string
+  version: number // Optimistic locking version
   createdAt: string
 }
 

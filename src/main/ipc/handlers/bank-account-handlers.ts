@@ -4,17 +4,76 @@
  * Unauthorized use, copying, or distribution is strictly prohibited.
  */
 
-import { eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { ipcMain } from 'electron'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../../database'
 import * as schema from '../../database/schema'
 import { createAuditLog } from '../utils/audit-logger'
 
+interface PaginationParams {
+  page?: number
+  limit?: number
+  search?: string
+}
+
+interface PaginatedResponse<T> {
+  data: T[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
 export function registerBankAccountHandlers(): void {
   const db = getDatabase()
 
-  // Get all active bank accounts
+  // Get paginated bank accounts
+  ipcMain.handle(
+    'db:bankAccounts:getPaginated',
+    async (_, params: PaginationParams): Promise<PaginatedResponse<unknown>> => {
+      const page = params.page || 1
+      const limit = params.limit || 50
+      const offset = (page - 1) * limit
+      const search = params.search?.trim()
+
+      // Build where clause
+      const whereClause = search
+        ? and(
+            eq(schema.bankAccounts.isActive, true),
+            sql`(${schema.bankAccounts.name} LIKE ${`%${search}%`} OR ${schema.bankAccounts.accountNumber} LIKE ${`%${search}%`})`
+          )
+        : eq(schema.bankAccounts.isActive, true)
+
+      // Get total count
+      const countResult = db
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.bankAccounts)
+        .where(whereClause)
+        .get()
+
+      const total = countResult?.count || 0
+
+      // Get paginated data
+      const data = db
+        .select()
+        .from(schema.bankAccounts)
+        .where(whereClause)
+        .limit(limit)
+        .offset(offset)
+        .all()
+
+      return {
+        data,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    }
+  )
+
+  // Get all active bank accounts - kept for backward compatibility
   ipcMain.handle('db:bankAccounts:getAll', async () => {
     return db.select().from(schema.bankAccounts).where(eq(schema.bankAccounts.isActive, true)).all()
   })
@@ -50,9 +109,21 @@ export function registerBankAccountHandlers(): void {
       .where(eq(schema.bankAccounts.id, id))
       .get()
 
+    if (!oldAccount) {
+      throw new Error('Bank account not found')
+    }
+
+    // Optimistic locking: Check version
+    const currentVersion = data.version || oldAccount.version
+    if (currentVersion !== oldAccount.version) {
+      throw new Error(
+        'CONCURRENT_EDIT: This bank account was modified by another user. Please refresh and try again.'
+      )
+    }
+
     const account = db
       .update(schema.bankAccounts)
-      .set({ ...data, updatedAt: new Date().toISOString() })
+      .set({ ...data, version: oldAccount.version + 1, updatedAt: new Date().toISOString() })
       .where(eq(schema.bankAccounts.id, id))
       .returning()
       .get()
@@ -61,7 +132,7 @@ export function registerBankAccountHandlers(): void {
     const changes: Record<string, { old: unknown; new: unknown }> = {}
     if (oldAccount) {
       Object.keys(data).forEach((key) => {
-        if (oldAccount[key] !== data[key]) {
+        if (key !== 'version' && oldAccount[key] !== data[key]) {
           changes[key] = { old: oldAccount[key], new: data[key] }
         }
       })

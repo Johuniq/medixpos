@@ -40,6 +40,10 @@ interface ProductsTableProps {
   onEdit: (product: Product) => void
   onDelete: (id: string) => void
   onViewBarcode: (product: Product) => void
+  page?: number
+  totalRecords?: number
+  limit?: number
+  onPageChange?: (page: number) => void
 }
 
 export default function ProductsTable({
@@ -50,10 +54,21 @@ export default function ProductsTable({
   loading,
   onEdit,
   onDelete,
-  onViewBarcode
+  onViewBarcode,
+  page: serverPage,
+  totalRecords,
+  limit: serverLimit,
+  onPageChange
 }: ProductsTableProps): React.JSX.Element {
-  const [page, setPage] = React.useState(0)
-  const [rowsPerPage, setRowsPerPage] = React.useState(25)
+  // Local pagination for client-side (when server pagination not provided)
+  const [localPage, setLocalPage] = React.useState(0)
+  const [localRowsPerPage, setLocalRowsPerPage] = React.useState(25)
+
+  // Use server pagination if available, otherwise local
+  const usingServerPagination = serverPage !== undefined && totalRecords !== undefined
+  const currentPage = usingServerPagination ? serverPage - 1 : localPage // Server uses 1-based, MUI uses 0-based
+  const rowsPerPage = usingServerPagination ? serverLimit || 50 : localRowsPerPage
+  const total = usingServerPagination ? totalRecords : products.length
 
   const StyledTableCell = styled(TableCell)(({ theme }) => ({
     [`&.${tableCellClasses.head}`]: {
@@ -72,15 +87,23 @@ export default function ProductsTable({
   }))
 
   const handleChangePage = (_event: unknown, newPage: number): void => {
-    setPage(newPage)
+    if (usingServerPagination && onPageChange) {
+      onPageChange(newPage + 1) // Convert back to 1-based for server
+    } else {
+      setLocalPage(newPage)
+    }
   }
 
   const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    setRowsPerPage(parseInt(event.target.value, 10))
-    setPage(0)
+    setLocalRowsPerPage(parseInt(event.target.value, 10))
+    setLocalPage(0)
   }
 
-  const paginatedProducts = products.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+  // For server pagination, products are already paginated
+  // For local pagination, slice the products array
+  const paginatedProducts = usingServerPagination
+    ? products
+    : products.slice(localPage * localRowsPerPage, localPage * localRowsPerPage + localRowsPerPage)
 
   if (loading) {
     return (
@@ -158,11 +181,11 @@ export default function ProductsTable({
         </TableContainer>
         <Paper>
           <TablePagination
-            rowsPerPageOptions={[10, 25, 50, 100]}
+            rowsPerPageOptions={usingServerPagination ? [] : [10, 25, 50, 100]}
             component="div"
-            count={0}
+            count={total}
             rowsPerPage={rowsPerPage}
-            page={0}
+            page={currentPage}
             onPageChange={handleChangePage}
             onRowsPerPageChange={handleChangeRowsPerPage}
           />
@@ -423,11 +446,11 @@ export default function ProductsTable({
       </TableContainer>
       <Paper>
         <TablePagination
-          rowsPerPageOptions={[10, 25, 50, 100]}
+          rowsPerPageOptions={usingServerPagination ? [] : [10, 25, 50, 100]}
           component="div"
-          count={products.length}
+          count={total}
           rowsPerPage={rowsPerPage}
-          page={page}
+          page={currentPage}
           onPageChange={handleChangePage}
           onRowsPerPageChange={handleChangeRowsPerPage}
         />

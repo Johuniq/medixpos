@@ -26,6 +26,20 @@ import {
 import { useState } from 'react'
 import { BankAccount } from '../../types/bankAccount'
 
+const StyledTableCell = styled(TableCell)(({ theme }) => ({
+  [`&.${tableCellClasses.head}`]: {
+    backgroundColor: theme.palette.grey[300],
+    color: theme.palette.text.secondary,
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    fontSize: '0.75rem',
+    letterSpacing: '0.5px'
+  },
+  [`&.${tableCellClasses.body}`]: {
+    fontSize: 14
+  }
+}))
+
 interface BankAccountsTableProps {
   accounts: BankAccount[]
   loading: boolean
@@ -33,6 +47,10 @@ interface BankAccountsTableProps {
   onEdit: (account: BankAccount) => void
   onDelete: (id: string) => void
   onAdjustBalance: (account: BankAccount) => void
+  page?: number
+  totalRecords?: number
+  limit?: number
+  onServerPageChange?: (page: number) => void
 }
 
 export default function BankAccountsTable({
@@ -41,35 +59,38 @@ export default function BankAccountsTable({
   hasAdjustPermission,
   onEdit,
   onDelete,
-  onAdjustBalance
+  onAdjustBalance,
+  page: serverPage,
+  totalRecords,
+  limit: serverLimit,
+  onServerPageChange
 }: BankAccountsTableProps): React.JSX.Element {
-  const [page, setPage] = useState(0)
-  const [rowsPerPage, setRowsPerPage] = useState(25)
+  const [localPage, setLocalPage] = useState(0)
+  const [localRowsPerPage, setLocalRowsPerPage] = useState(25)
 
-  const StyledTableCell = styled(TableCell)(({ theme }) => ({
-    [`&.${tableCellClasses.head}`]: {
-      backgroundColor: theme.palette.grey[300],
-      color: theme.palette.text.secondary,
-      fontWeight: 600,
-      textTransform: 'uppercase',
-      fontSize: '0.75rem',
-      letterSpacing: '0.5px'
-    },
-    [`&.${tableCellClasses.body}`]: {
-      fontSize: 14
-    }
-  }))
+  // Use server pagination if available, otherwise local
+  const usingServerPagination = serverPage !== undefined && totalRecords !== undefined
+  const currentPage = usingServerPagination ? serverPage - 1 : localPage
+  const rowsPerPage = usingServerPagination ? serverLimit || 50 : localRowsPerPage
+  const total = usingServerPagination ? totalRecords : accounts.length
 
   const handleChangePage = (_: unknown, newPage: number): void => {
-    setPage(newPage)
+    if (usingServerPagination && onServerPageChange) {
+      onServerPageChange(newPage + 1)
+    } else {
+      setLocalPage(newPage)
+    }
   }
 
   const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    setRowsPerPage(parseInt(event.target.value, 10))
-    setPage(0)
+    const newRowsPerPage = parseInt(event.target.value, 10)
+    setLocalRowsPerPage(newRowsPerPage)
+    setLocalPage(0)
   }
 
-  const paginatedAccounts = accounts.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+  const paginatedAccounts = usingServerPagination
+    ? accounts
+    : accounts.slice(localPage * localRowsPerPage, localPage * localRowsPerPage + localRowsPerPage)
 
   const getAccountTypeLabel = (type: string): string => {
     switch (type) {
@@ -271,12 +292,12 @@ export default function BankAccountsTable({
       <Paper>
         <TablePagination
           component="div"
-          count={accounts.length}
-          page={page}
+          count={total}
+          page={currentPage}
           onPageChange={handleChangePage}
           rowsPerPage={rowsPerPage}
           onRowsPerPageChange={handleChangeRowsPerPage}
-          rowsPerPageOptions={[10, 25, 50, 100]}
+          rowsPerPageOptions={usingServerPagination ? [] : [10, 25, 50, 100]}
         />
       </Paper>
     </Box>

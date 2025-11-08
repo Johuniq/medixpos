@@ -56,6 +56,8 @@ const api = {
   // Suppliers
   suppliers: {
     getAll: () => ipcRenderer.invoke('db:suppliers:getAll'),
+    getPaginated: (params: { page?: number; limit?: number; search?: string }) =>
+      ipcRenderer.invoke('db:suppliers:getPaginated', params),
     create: (data: Record<string, unknown>) => ipcRenderer.invoke('db:suppliers:create', data),
     update: (id: string, data: Record<string, unknown>) =>
       ipcRenderer.invoke('db:suppliers:update', { id, data }),
@@ -78,6 +80,8 @@ const api = {
   // Bank Accounts
   bankAccounts: {
     getAll: () => ipcRenderer.invoke('db:bankAccounts:getAll'),
+    getPaginated: (params: { page?: number; limit?: number; search?: string }) =>
+      ipcRenderer.invoke('db:bankAccounts:getPaginated', params),
     create: (data: Record<string, unknown>) => ipcRenderer.invoke('db:bankAccounts:create', data),
     update: (id: string, data: Record<string, unknown>) =>
       ipcRenderer.invoke('db:bankAccounts:update', { id, data }),
@@ -93,6 +97,8 @@ const api = {
   // Products
   products: {
     getAll: (search?: string) => ipcRenderer.invoke('db:products:getAll', search),
+    getPaginated: (params: { page?: number; limit?: number; search?: string }) =>
+      ipcRenderer.invoke('db:products:getPaginated', params),
     getById: (id: string) => ipcRenderer.invoke('db:products:getById', id),
     getByBarcode: (barcode: string) => ipcRenderer.invoke('db:products:getByBarcode', barcode),
     search: (search: string) => ipcRenderer.invoke('db:products:search', search),
@@ -104,13 +110,27 @@ const api = {
   // Inventory
   inventory: {
     getAll: () => ipcRenderer.invoke('db:inventory:getAll'),
+    getPaginated: (params: { page?: number; limit?: number; search?: string }) =>
+      ipcRenderer.invoke('db:inventory:getPaginated', params),
     getLowStock: () => ipcRenderer.invoke('db:inventory:getLowStock'),
-    updateQuantity: (productId: string, quantity: number) =>
-      ipcRenderer.invoke('db:inventory:updateQuantity', { productId, quantity })
+    updateQuantity: (
+      productId: string,
+      quantity: number,
+      options?: { userId?: string; username?: string; version?: number }
+    ) =>
+      ipcRenderer.invoke('db:inventory:updateQuantity', {
+        productId,
+        quantity,
+        userId: options?.userId,
+        username: options?.username,
+        version: options?.version
+      })
   },
   // Customers
   customers: {
     getAll: (search?: string) => ipcRenderer.invoke('db:customers:getAll', search),
+    getPaginated: (params: { page?: number; limit?: number; search?: string }) =>
+      ipcRenderer.invoke('db:customers:getPaginated', params),
     getById: (id: string) => ipcRenderer.invoke('db:customers:getById', id),
     getByPhone: (phone: string) => ipcRenderer.invoke('db:customers:getByPhone', phone),
     create: (data: Record<string, unknown>) => ipcRenderer.invoke('db:customers:create', data),
@@ -122,6 +142,12 @@ const api = {
   // Prescriptions
   prescriptions: {
     getAll: (customerId?: string) => ipcRenderer.invoke('db:prescriptions:getAll', customerId),
+    getPaginated: (params: {
+      page?: number
+      limit?: number
+      search?: string
+      customerId?: string
+    }) => ipcRenderer.invoke('db:prescriptions:getPaginated', params),
     getById: (id: string) => ipcRenderer.invoke('db:prescriptions:getById', id),
     getByCustomer: (customerId: string) =>
       ipcRenderer.invoke('db:prescriptions:getByCustomer', customerId),
@@ -138,6 +164,13 @@ const api = {
       ipcRenderer.invoke('db:sales:create', { sale, items }),
     getAll: (startDate?: string, endDate?: string) =>
       ipcRenderer.invoke('db:sales:getAll', { startDate, endDate }),
+    getPaginated: (params: {
+      page?: number
+      limit?: number
+      startDate?: string
+      endDate?: string
+      search?: string
+    }) => ipcRenderer.invoke('db:sales:getPaginated', params),
     getById: (id: string) => ipcRenderer.invoke('db:sales:getById', id),
     getByCustomer: (customerId: string) => ipcRenderer.invoke('db:sales:getByCustomer', customerId)
   },
@@ -147,6 +180,13 @@ const api = {
       ipcRenderer.invoke('db:salesReturns:create', { salesReturn, items }),
     getAll: (startDate?: string, endDate?: string) =>
       ipcRenderer.invoke('db:salesReturns:getAll', { startDate, endDate }),
+    getPaginated: (params: {
+      page?: number
+      limit?: number
+      search?: string
+      startDate?: string
+      endDate?: string
+    }) => ipcRenderer.invoke('db:salesReturns:getPaginated', params),
     getById: (id: string) => ipcRenderer.invoke('db:salesReturns:getById', id)
   },
   // Purchases
@@ -155,6 +195,13 @@ const api = {
       ipcRenderer.invoke('db:purchases:create', { purchase, items }),
     getAll: (startDate?: string, endDate?: string) =>
       ipcRenderer.invoke('db:purchases:getAll', { startDate, endDate }),
+    getPaginated: (params: {
+      page?: number
+      limit?: number
+      startDate?: string
+      endDate?: string
+      search?: string
+    }) => ipcRenderer.invoke('db:purchases:getPaginated', params),
     getById: (id: string) => ipcRenderer.invoke('db:purchases:getById', id),
     delete: (id: string, userId: string) =>
       ipcRenderer.invoke('db:purchases:delete', { id, userId })
@@ -165,18 +212,39 @@ const api = {
       ipcRenderer.invoke('db:purchaseReturns:create', { purchaseReturn, items }),
     getAll: (startDate?: string, endDate?: string) =>
       ipcRenderer.invoke('db:purchaseReturns:getAll', { startDate, endDate }),
+    getPaginated: (params: {
+      page?: number
+      limit?: number
+      search?: string
+      startDate?: string
+      endDate?: string
+    }) => ipcRenderer.invoke('db:purchaseReturns:getPaginated', params),
     getById: (id: string) => ipcRenderer.invoke('db:purchaseReturns:getById', id)
   },
   // Damaged Items
   damagedItems: {
     getAll: () => ipcRenderer.invoke('db:damagedItems:getAll'),
+    getPaginated: (params: {
+      page?: number
+      limit?: number
+      search?: string
+      startDate?: string
+      endDate?: string
+    }) => ipcRenderer.invoke('db:damagedItems:getPaginated', params),
     create: (data: Record<string, unknown>) => ipcRenderer.invoke('db:damagedItems:create', data)
   },
   // Expenses
   expenses: {
     create: (data: Record<string, unknown>) => ipcRenderer.invoke('db:expenses:create', data),
     getAll: (startDate?: string, endDate?: string) =>
-      ipcRenderer.invoke('db:expenses:getAll', { startDate, endDate })
+      ipcRenderer.invoke('db:expenses:getAll', { startDate, endDate }),
+    getPaginated: (params: {
+      page?: number
+      limit?: number
+      search?: string
+      startDate?: string
+      endDate?: string
+    }) => ipcRenderer.invoke('db:expenses:getPaginated', params)
   },
   // Settings
   settings: {
@@ -190,7 +258,21 @@ const api = {
     salesSummary: (startDate: string, endDate: string) =>
       ipcRenderer.invoke('db:reports:salesSummary', { startDate, endDate }),
     topProducts: (startDate: string, endDate: string, limit?: number) =>
-      ipcRenderer.invoke('db:reports:topProducts', { startDate, endDate, limit })
+      ipcRenderer.invoke('db:reports:topProducts', { startDate, endDate, limit }),
+    profitMargin: (startDate: string, endDate: string) =>
+      ipcRenderer.invoke('db:reports:profitMargin', { startDate, endDate }),
+    vendorPerformance: (startDate: string, endDate: string) =>
+      ipcRenderer.invoke('db:reports:vendorPerformance', { startDate, endDate }),
+    employeePerformance: (startDate: string, endDate: string) =>
+      ipcRenderer.invoke('db:reports:employeePerformance', { startDate, endDate }),
+    slowMovingStock: (startDate: string, endDate: string) =>
+      ipcRenderer.invoke('db:reports:slowMovingStock', { startDate, endDate }),
+    paymentMethodAnalysis: (startDate: string, endDate: string) =>
+      ipcRenderer.invoke('db:reports:paymentMethodAnalysis', { startDate, endDate }),
+    peakHoursAnalysis: (startDate: string, endDate: string) =>
+      ipcRenderer.invoke('db:reports:peakHoursAnalysis', { startDate, endDate }),
+    customerRFMAnalysis: () => ipcRenderer.invoke('db:reports:customerRFMAnalysis'),
+    yearOverYear: () => ipcRenderer.invoke('db:reports:yearOverYear')
   },
   // Audit Logs
   auditLogs: {
@@ -286,6 +368,86 @@ const api = {
   auth: {
     invalidateSession: (token: string | null | undefined) =>
       ipcRenderer.invoke('auth:invalidateSession', token)
+  },
+  // Auto Update
+  autoUpdate: {
+    checkForUpdates: () => ipcRenderer.invoke('auto-update:check'),
+    downloadUpdate: () => ipcRenderer.invoke('auto-update:download'),
+    installUpdate: () => ipcRenderer.invoke('auto-update:install'),
+    getVersion: () => ipcRenderer.invoke('auto-update:get-version'),
+    getStatus: () => ipcRenderer.invoke('auto-update:get-status'),
+    onStatusChange: (callback: (event: string, data: Record<string, unknown>) => void) => {
+      ipcRenderer.on('auto-update-status', (_event, payload) => {
+        callback(payload.event, payload.data)
+      })
+    },
+    removeStatusListener: () => {
+      ipcRenderer.removeAllListeners('auto-update-status')
+    }
+  },
+  // Barcode Scanner
+  barcode: {
+    validate: (barcode: string) => ipcRenderer.invoke('barcode:validate', barcode),
+    searchProduct: (barcode: string) => ipcRenderer.invoke('barcode:searchProduct', barcode),
+    getSettings: () => ipcRenderer.invoke('barcode:getSettings'),
+    updateSettings: (settings: Record<string, string>) =>
+      ipcRenderer.invoke('barcode:updateSettings', settings),
+    test: (testBarcode: string) => ipcRenderer.invoke('barcode:test', testBarcode),
+    getHistory: () => ipcRenderer.invoke('barcode:getHistory'),
+    bulkValidate: (barcodes: string[]) => ipcRenderer.invoke('barcode:bulkValidate', barcodes)
+  },
+
+  // Cash Drawer
+  cashDrawer: {
+    listPorts: () => ipcRenderer.invoke('cash-drawer:list-ports'),
+    connect: (portPath: string, baudRate?: number) =>
+      ipcRenderer.invoke('cash-drawer:connect', portPath, baudRate),
+    disconnect: () => ipcRenderer.invoke('cash-drawer:disconnect'),
+    open: (commandType?: 'STANDARD' | 'ALTERNATIVE' | 'EPSON' | 'STAR') =>
+      ipcRenderer.invoke('cash-drawer:open', commandType),
+    test: () => ipcRenderer.invoke('cash-drawer:test'),
+    getStatus: () => ipcRenderer.invoke('cash-drawer:get-status'),
+    autoConnect: () => ipcRenderer.invoke('cash-drawer:auto-connect'),
+    reconnect: () => ipcRenderer.invoke('cash-drawer:reconnect')
+  },
+  // Export Data
+  export: {
+    products: (options: {
+      format: 'csv' | 'xlsx' | 'json'
+      startDate?: string
+      endDate?: string
+      filters?: Record<string, unknown>
+    }) => ipcRenderer.invoke('db:export:products', options),
+    customers: (options: {
+      format: 'csv' | 'xlsx' | 'json'
+      startDate?: string
+      endDate?: string
+      filters?: Record<string, unknown>
+    }) => ipcRenderer.invoke('db:export:customers', options),
+    suppliers: (options: {
+      format: 'csv' | 'xlsx' | 'json'
+      startDate?: string
+      endDate?: string
+      filters?: Record<string, unknown>
+    }) => ipcRenderer.invoke('db:export:suppliers', options),
+    inventory: (options: {
+      format: 'csv' | 'xlsx' | 'json'
+      startDate?: string
+      endDate?: string
+      filters?: Record<string, unknown>
+    }) => ipcRenderer.invoke('db:export:inventory', options),
+    sales: (options: {
+      format: 'csv' | 'xlsx' | 'json'
+      startDate?: string
+      endDate?: string
+      filters?: Record<string, unknown>
+    }) => ipcRenderer.invoke('db:export:sales', options),
+    purchases: (options: {
+      format: 'csv' | 'xlsx' | 'json'
+      startDate?: string
+      endDate?: string
+      filters?: Record<string, unknown>
+    }) => ipcRenderer.invoke('db:export:purchases', options)
   }
 }
 

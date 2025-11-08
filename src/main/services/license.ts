@@ -622,6 +622,7 @@ export class LicenseService {
     lastValidated?: string
     usage?: number
     limitUsage?: number
+    licenseKey?: string
   } {
     return {
       isLicensed: !!this.licenseConfig.licenseKey,
@@ -629,7 +630,8 @@ export class LicenseService {
       expiresAt: this.licenseConfig.expiresAt,
       lastValidated: this.licenseConfig.lastValidated,
       usage: this.licenseConfig.usage,
-      limitUsage: this.licenseConfig.limitUsage
+      limitUsage: this.licenseConfig.limitUsage,
+      licenseKey: this.licenseConfig.licenseKey
     }
   }
 

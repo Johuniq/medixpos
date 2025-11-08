@@ -36,6 +36,10 @@ interface DamagedItemsTableProps {
   onItemsPerPageChange: (items: number) => void
   onAddDamagedItem: () => void
   onViewDetails: (item: DamagedItem) => void
+  page?: number
+  totalRecords?: number
+  limit?: number
+  onServerPageChange?: (page: number) => void
 }
 
 export default function DamagedItemsTable({

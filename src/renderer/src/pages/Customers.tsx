@@ -13,6 +13,7 @@ import CustomerHeader from '../components/customers/CustomerHeader'
 import CustomersTable from '../components/customers/CustomersTable'
 import CustomerStats from '../components/customers/CustomerStats'
 import CustomerViewModal from '../components/customers/CustomerViewModal'
+import ExportModal from '../components/export/ExportModal'
 import { useSettingsStore } from '../store/settingsStore'
 import { Customer, CustomerFormData } from '../types/customer'
 
@@ -23,8 +24,14 @@ export default function Customers(): React.JSX.Element {
   const [statusFilter, setStatusFilter] = useState('all')
   const [showModal, setShowModal] = useState(false)
   const [showViewModal, setShowViewModal] = useState(false)
+  const [showExportModal, setShowExportModal] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
   const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(null)
+
+  // Pagination state
+  const [page, setPage] = useState(1)
+  const [totalRecords, setTotalRecords] = useState(0)
+  const [limit] = useState(50)
 
   const currency = useSettingsStore((state) => state.currency)
 
@@ -58,12 +65,12 @@ export default function Customers(): React.JSX.Element {
   useEffect(() => {
     initializeCustomers()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [page, searchTerm])
 
   useEffect(() => {
     filterCustomers()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customers, searchTerm, statusFilter])
+  }, [customers, statusFilter])
 
   const initializeCustomers = async (): Promise<void> => {
     try {
@@ -79,9 +86,9 @@ export default function Customers(): React.JSX.Element {
 
   const loadCustomers = async (): Promise<void> => {
     try {
-      const allCustomers = await window.api.customers.getAll()
+      const response = await window.api.customers.getPaginated({ page, limit, search: searchTerm })
       // Map isActive to status for frontend compatibility
-      const mappedCustomers = (allCustomers as unknown as Array<Record<string, unknown>>).map(
+      const mappedCustomers = (response.data as unknown as Array<Record<string, unknown>>).map(
         (customer) => ({
           ...customer,
           status: customer.isActive ? 'active' : 'inactive',
@@ -90,6 +97,7 @@ export default function Customers(): React.JSX.Element {
         })
       ) as unknown as Customer[]
       setCustomers(mappedCustomers)
+      setTotalRecords(response.total)
     } catch {
       toast.error('Failed to load customers')
     }
@@ -98,22 +106,21 @@ export default function Customers(): React.JSX.Element {
   const filterCustomers = (): void => {
     let filtered = [...customers]
 
-    // Search filter
-    if (searchTerm) {
-      filtered = filtered.filter(
-        (customer) =>
-          customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          customer.phone.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          customer.email?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    }
-
-    // Status filter
+    // Status filter (client-side)
     if (statusFilter !== 'all') {
       filtered = filtered.filter((customer) => customer.status === statusFilter)
     }
 
     setFilteredCustomers(filtered)
+  }
+
+  const handleSearchChange = (search: string): void => {
+    setSearchTerm(search)
+    setPage(1) // Reset to first page on search
+  }
+
+  const handlePageChange = (newPage: number): void => {
+    setPage(newPage)
   }
 
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
@@ -126,10 +133,13 @@ export default function Customers(): React.JSX.Element {
 
     try {
       if (editingCustomer) {
-        await window.api.customers.update(
-          editingCustomer.id,
-          formData as unknown as Record<string, unknown>
-        )
+        // Include version for optimistic locking
+        const updateData = {
+          ...formData,
+          version: editingCustomer.version
+        } as unknown as Record<string, unknown>
+
+        await window.api.customers.update(editingCustomer.id, updateData)
         toast.success('Customer updated successfully')
       } else {
         await window.api.customers.create(formData as unknown as Record<string, unknown>)
@@ -137,8 +147,15 @@ export default function Customers(): React.JSX.Element {
       }
       handleCloseModal()
       await loadCustomers()
-    } catch {
-      toast.error(editingCustomer ? 'Failed to update customer' : 'Failed to add customer')
+    } catch (error) {
+      // Handle concurrent edit error
+      if (error instanceof Error && error.message.includes('CONCURRENT_EDIT')) {
+        toast.error('This customer was modified by another user. Please refresh and try again.')
+        await loadCustomers() // Auto-refresh the data
+        handleCloseModal()
+      } else {
+        toast.error(editingCustomer ? 'Failed to update customer' : 'Failed to add customer')
+      }
     }
   }
 
@@ -214,9 +231,10 @@ export default function Customers(): React.JSX.Element {
         <CustomerFilters
           searchTerm={searchTerm}
           statusFilter={statusFilter}
-          onSearchChange={setSearchTerm}
+          onSearchChange={handleSearchChange}
           onStatusFilterChange={setStatusFilter}
           onAddClick={() => setShowModal(true)}
+          onExportClick={() => setShowExportModal(true)}
         />
       </div>
 
@@ -227,6 +245,10 @@ export default function Customers(): React.JSX.Element {
           onEdit={handleEdit}
           onView={handleView}
           onDelete={handleDelete}
+          page={page}
+          totalRecords={totalRecords}
+          limit={limit}
+          onPageChange={handlePageChange}
         />
       </div>
 
@@ -244,6 +266,13 @@ export default function Customers(): React.JSX.Element {
         onClose={handleCloseViewModal}
         customer={viewingCustomer}
         currencySymbol={getCurrencySymbol()}
+      />
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        defaultExportType="customers"
       />
     </Container>
   )

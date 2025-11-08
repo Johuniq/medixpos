@@ -19,6 +19,9 @@ export default function Prescriptions(): React.JSX.Element {
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([])
   const [filteredPrescriptions, setFilteredPrescriptions] = useState<Prescription[]>([])
   const [searchTerm, setSearchTerm] = useState('')
+  const [page, setPage] = useState(1)
+  const [totalRecords, setTotalRecords] = useState(0)
+  const [limit] = useState(50)
   const [statusFilter, setStatusFilter] = useState('all')
   const [showFormModal, setShowFormModal] = useState(false)
   const [showViewModal, setShowViewModal] = useState(false)
@@ -27,21 +30,27 @@ export default function Prescriptions(): React.JSX.Element {
 
   useEffect(() => {
     loadPrescriptions()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, searchTerm])
 
   useEffect(() => {
     filterPrescriptions()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prescriptions, searchTerm, statusFilter])
+  }, [prescriptions, statusFilter])
 
   const loadPrescriptions = async (): Promise<void> => {
     try {
-      const data = await window.api.prescriptions.getAll()
-      console.log('Raw prescription data from API:', data)
+      const response = await window.api.prescriptions.getPaginated({
+        page,
+        limit,
+        search: searchTerm
+      })
+
+      console.log('Raw prescription data from API:', response.data)
 
       // The data is already in the correct format from the handler
       const transformedData = (
-        data as Array<{
+        response.data as Array<{
           prescription: Record<string, unknown>
           customer: Record<string, unknown> | null
           sale: Record<string, unknown> | null
@@ -81,10 +90,20 @@ export default function Prescriptions(): React.JSX.Element {
 
       console.log('Final transformed prescriptions:', transformedData)
       setPrescriptions(transformedData)
+      setTotalRecords(response.total)
     } catch (error) {
       console.error('Error loading prescriptions:', error)
       toast.error('Failed to load prescriptions')
     }
+  }
+
+  const handleSearchChange = (search: string): void => {
+    setSearchTerm(search)
+    setPage(1)
+  }
+
+  const handlePageChange = (newPage: number): void => {
+    setPage(newPage)
   }
 
   const filterPrescriptions = (): void => {
@@ -186,7 +205,7 @@ export default function Prescriptions(): React.JSX.Element {
       <PrescriptionFilters
         searchTerm={searchTerm}
         statusFilter={statusFilter}
-        onSearchChange={setSearchTerm}
+        onSearchChange={handleSearchChange}
         onStatusFilterChange={setStatusFilter}
         onAddClick={handleAddNew}
       />
@@ -197,6 +216,10 @@ export default function Prescriptions(): React.JSX.Element {
         onView={handleView}
         onDelete={handleDelete}
         onRefresh={loadPrescriptions}
+        page={page}
+        totalRecords={totalRecords}
+        limit={limit}
+        onServerPageChange={handlePageChange}
       />
 
       {showFormModal && (

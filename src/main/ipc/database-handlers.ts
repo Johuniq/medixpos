@@ -25,6 +25,8 @@
  */
 
 import { registerBankAccountHandlers } from './handlers/bank-account-handlers'
+import { registerBarcodeHandlers } from './handlers/barcode-handlers'
+import { registerCashDrawerHandlers } from './handlers/cash-drawer-handlers'
 import { registerCategoryUnitHandlers } from './handlers/category-unit-handlers'
 import { registerCustomerHandlers } from './handlers/customer-handlers'
 import { registerDatabaseUtilsHandlers } from './handlers/database-utils-handlers'
@@ -59,4 +61,6 @@ export function registerDatabaseHandlers(): void {
   registerHRHandlers()
   setupNotificationHandlers()
   setupFeatureLicensingHandlers()
+  registerBarcodeHandlers()
+  registerCashDrawerHandlers()
 }

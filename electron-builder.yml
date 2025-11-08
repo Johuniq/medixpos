@@ -69,7 +69,9 @@ appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: true
 publish:
-  provider: generic
-  url: https://medixpos.com/updates
+  provider: github
+  owner: Johuniq
+  repo: medixpos
+  releaseType: release
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/

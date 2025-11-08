@@ -9,7 +9,10 @@ import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from 'electro
 import fs from 'fs'
 import path, { join } from 'path'
 import { initializeBackend } from './backend-initializer'
+import { registerAutoUpdateHandlers } from './ipc/handlers/auto-update-handlers'
+import './ipc/handlers/export-handlers' // Import export handlers
 import { registerLicenseHandlers } from './ipc/handlers/license-handlers'
+import { AutoUpdateService } from './services/autoUpdater'
 import { LicenseService } from './services/license'
 
 // Get the correct path for resources in both dev and production
@@ -60,7 +63,7 @@ function getIconPath(): string {
   return pngPath
 }
 
-function createWindow(): void {
+function createWindow(): BrowserWindow {
   const iconPath = getIconPath()
 
   // Create the browser window.
@@ -100,6 +103,8 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  return mainWindow
 }
 
 // This method will be called when Electron has finished
@@ -159,6 +164,9 @@ app.whenReady().then(async () => {
     // Register license handlers first (needed for frontend license check)
     registerLicenseHandlers()
 
+    // Register auto-update handlers
+    registerAutoUpdateHandlers()
+
     // Check for valid license before initializing backend
     const licenseService = LicenseService.getInstance()
     await licenseService.whenReady()
@@ -211,7 +219,14 @@ app.whenReady().then(async () => {
   })
 
   try {
-    createWindow()
+    const window = createWindow()
+
+    // Initialize auto-updater in production
+    if (!is.dev && process.env.NODE_ENV !== 'development') {
+      const autoUpdateService = AutoUpdateService.getInstance()
+      autoUpdateService.setMainWindow(window)
+      autoUpdateService.startPeriodicChecks()
+    }
   } catch (error) {
     console.error('Failed to create window:', error)
     dialog.showErrorBox(
@@ -225,7 +240,15 @@ app.whenReady().then(async () => {
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) {
+      const window = createWindow()
+
+      // Initialize auto-updater in production
+      if (!is.dev && process.env.NODE_ENV !== 'development') {
+        const autoUpdateService = AutoUpdateService.getInstance()
+        autoUpdateService.setMainWindow(window)
+      }
+    }
   })
 })
 

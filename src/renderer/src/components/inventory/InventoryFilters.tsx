@@ -4,7 +4,7 @@
  * Unauthorized use, copying, or distribution is strictly prohibited.
  */
 
-import { Add, Search } from '@mui/icons-material'
+import { Add, CloudDownload, Search } from '@mui/icons-material'
 import {
   Box,
   Button,
@@ -22,6 +22,7 @@ interface InventoryFiltersProps {
   onSearchChange: (value: string) => void
   onFilterChange: (value: 'all' | 'low' | 'out') => void
   onAdjustStock: () => void
+  onExportClick: () => void
 }
 
 export default function InventoryFilters({
@@ -29,8 +30,9 @@ export default function InventoryFilters({
   filterType,
   onSearchChange,
   onFilterChange,
-  onAdjustStock
-}: InventoryFiltersProps) {
+  onAdjustStock,
+  onExportClick
+}: InventoryFiltersProps): React.JSX.Element {
   return (
     <Paper sx={{ p: 2, mb: 3 }}>
       <Box
@@ -70,9 +72,14 @@ export default function InventoryFilters({
           </FormControl>
         </Box>
 
-        <Button variant="contained" startIcon={<Add />} onClick={onAdjustStock}>
-          Adjust Stock
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button variant="outlined" startIcon={<CloudDownload />} onClick={onExportClick}>
+            Export Data
+          </Button>
+          <Button variant="contained" startIcon={<Add />} onClick={onAdjustStock}>
+            Adjust Stock
+          </Button>
+        </Box>
       </Box>
     </Paper>
   )

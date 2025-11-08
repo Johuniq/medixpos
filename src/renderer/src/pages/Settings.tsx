@@ -9,8 +9,11 @@ import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import LicenseActivation from '../components/LicenseActivation'
 import LicenseInfo from '../components/LicenseInfo'
+import AboutSettings from '../components/settings/AboutSettings'
 import BackupRestoreSection from '../components/settings/BackupRestoreSection'
+import BarcodeScannerSettings from '../components/settings/BarcodeScannerSettings'
 import BusinessInfoSettings from '../components/settings/BusinessInfoSettings'
+import CashDrawerSettings from '../components/settings/CashDrawerSettings'
 import CustomerSettings from '../components/settings/CustomerSettings'
 import GeneralSettingsForm from '../components/settings/GeneralSettingsForm'
 import HardwareSettings from '../components/settings/HardwareSettings'
@@ -391,6 +394,12 @@ export default function Settings(): React.JSX.Element {
         <HardwareSettings settings={allSettings} onSave={handleSaveSettings} />
       )}
 
+      {/* Barcode Scanner Settings */}
+      {activeTab === 'barcode' && <BarcodeScannerSettings />}
+
+      {/* Cash Drawer Settings */}
+      {activeTab === 'cash-drawer' && <CashDrawerSettings />}
+
       {/* Customer Settings */}
       {activeTab === 'customers' && (
         <CustomerSettings settings={allSettings} onSave={handleSaveSettings} />
@@ -400,6 +409,9 @@ export default function Settings(): React.JSX.Element {
       {activeTab === 'license' && (
         <LicenseInfo onActivateClick={() => setActivateLicenseDialogOpen(true)} />
       )}
+
+      {/* About Settings */}
+      {activeTab === 'about' && <AboutSettings />}
 
       {/* Backup & Restore Settings */}
       {activeTab === 'backup' && canAccessBackup && (

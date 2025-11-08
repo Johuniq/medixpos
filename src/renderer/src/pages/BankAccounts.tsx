@@ -22,6 +22,9 @@ export default function BankAccounts(): React.JSX.Element {
   const user = useAuthStore((state) => state.user)
   const [accounts, setAccounts] = useState<BankAccount[]>([])
   const [searchTerm, setSearchTerm] = useState('')
+  const [page, setPage] = useState(1)
+  const [totalRecords, setTotalRecords] = useState(0)
+  const [limit] = useState(50)
   const [showModal, setShowModal] = useState(false)
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false)
   const [editingAccount, setEditingAccount] = useState<BankAccount | null>(null)
@@ -47,14 +50,20 @@ export default function BankAccounts(): React.JSX.Element {
 
   useEffect(() => {
     loadData()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, searchTerm])
 
   const loadData = async (): Promise<void> => {
     try {
       setLoading(true)
-      const accountsData = await window.api.bankAccounts.getAll()
-      const typedAccounts = accountsData as unknown as BankAccount[]
+      const response = await window.api.bankAccounts.getPaginated({
+        page,
+        limit,
+        search: searchTerm
+      })
+      const typedAccounts = response.data as unknown as BankAccount[]
       setAccounts(typedAccounts)
+      setTotalRecords(response.total)
     } catch (error) {
       console.error('Failed to load bank accounts:', error)
       toast.error('Failed to load bank accounts')
@@ -63,12 +72,16 @@ export default function BankAccounts(): React.JSX.Element {
     }
   }
 
-  const filteredAccounts = accounts.filter(
-    (account) =>
-      account.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (account.accountNumber && account.accountNumber.includes(searchTerm)) ||
-      (account.bankName && account.bankName.toLowerCase().includes(searchTerm.toLowerCase()))
-  )
+  const handleSearchChange = (search: string): void => {
+    setSearchTerm(search)
+    setPage(1)
+  }
+
+  const handlePageChange = (newPage: number): void => {
+    setPage(newPage)
+  }
+
+  const filteredAccounts = accounts
 
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault()
@@ -82,7 +95,8 @@ export default function BankAccounts(): React.JSX.Element {
     try {
       const submitData = {
         ...formData,
-        openingBalance: parseFloat(formData.openingBalance) || 0
+        openingBalance: parseFloat(formData.openingBalance) || 0,
+        ...(editingAccount && { version: editingAccount.version }) // Include version for optimistic locking
       }
 
       if (editingAccount) {
@@ -96,7 +110,14 @@ export default function BankAccounts(): React.JSX.Element {
       loadData()
     } catch (error) {
       console.error('Failed to save account:', error)
-      toast.error(editingAccount ? 'Failed to update account' : 'Failed to create account')
+      // Handle concurrent edit error
+      if (error instanceof Error && error.message.includes('CONCURRENT_EDIT')) {
+        toast.error('This account was modified by another user. Please refresh and try again.')
+        loadData() // Auto-refresh the data
+        handleCloseModal()
+      } else {
+        toast.error(editingAccount ? 'Failed to update account' : 'Failed to create account')
+      }
     } finally {
       setLoading(false)
     }
@@ -201,10 +222,6 @@ export default function BankAccounts(): React.JSX.Element {
     })
   }
 
-  const handleSearchChange = (value: string): void => {
-    setSearchTerm(value)
-  }
-
   const handleFormChange = (data: Partial<BankAccountFormData>): void => {
     setFormData({ ...formData, ...data })
   }
@@ -239,6 +256,10 @@ export default function BankAccounts(): React.JSX.Element {
           onEdit={handleEdit}
           onDelete={handleDelete}
           onAdjustBalance={handleAdjustBalance}
+          page={page}
+          totalRecords={totalRecords}
+          limit={limit}
+          onServerPageChange={handlePageChange}
         />
       </div>
 

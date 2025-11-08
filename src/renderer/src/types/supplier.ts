@@ -20,6 +20,7 @@ export interface Supplier {
   creditLimit?: number
   creditDays?: number
   isActive: boolean
+  version: number // Optimistic locking version
 }
 
 export interface BankAccount {

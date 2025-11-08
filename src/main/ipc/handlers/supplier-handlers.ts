@@ -4,19 +4,78 @@
  * Unauthorized use, copying, or distribution is strictly prohibited.
  */
 
-import { and, desc, eq, gte, lte } from 'drizzle-orm'
+import { and, desc, eq, gte, lte, sql } from 'drizzle-orm'
 import { ipcMain } from 'electron'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../../database'
 import * as schema from '../../database/schema'
 import { createAuditLog } from '../utils/audit-logger'
 
+interface PaginationParams {
+  page?: number
+  limit?: number
+  search?: string
+}
+
+interface PaginatedResponse<T> {
+  data: T[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
 export function registerSupplierHandlers(): void {
   const db = getDatabase()
 
   // ==================== SUPPLIERS ====================
 
-  // Get all active suppliers
+  // Get paginated suppliers
+  ipcMain.handle(
+    'db:suppliers:getPaginated',
+    async (_, params: PaginationParams): Promise<PaginatedResponse<unknown>> => {
+      const page = params.page || 1
+      const limit = params.limit || 50
+      const offset = (page - 1) * limit
+      const search = params.search?.trim()
+
+      // Build where clause
+      const whereClause = search
+        ? and(
+            eq(schema.suppliers.isActive, true),
+            sql`(${schema.suppliers.name} LIKE ${`%${search}%`} OR ${schema.suppliers.code} LIKE ${`%${search}%`})`
+          )
+        : eq(schema.suppliers.isActive, true)
+
+      // Get total count
+      const countResult = db
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.suppliers)
+        .where(whereClause)
+        .get()
+
+      const total = countResult?.count || 0
+
+      // Get paginated data
+      const data = db
+        .select()
+        .from(schema.suppliers)
+        .where(whereClause)
+        .limit(limit)
+        .offset(offset)
+        .all()
+
+      return {
+        data,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    }
+  )
+
+  // Get all active suppliers - kept for backward compatibility
   ipcMain.handle('db:suppliers:getAll', async () => {
     return db.select().from(schema.suppliers).where(eq(schema.suppliers.isActive, true)).all()
   })
@@ -75,9 +134,21 @@ export function registerSupplierHandlers(): void {
     // Get old data for audit log
     const oldSupplier = db.select().from(schema.suppliers).where(eq(schema.suppliers.id, id)).get()
 
+    if (!oldSupplier) {
+      throw new Error('Supplier not found')
+    }
+
+    // Optimistic locking: Check version
+    const currentVersion = data.version || oldSupplier.version
+    if (currentVersion !== oldSupplier.version) {
+      throw new Error(
+        'CONCURRENT_EDIT: This supplier was modified by another user. Please refresh and try again.'
+      )
+    }
+
     const supplier = db
       .update(schema.suppliers)
-      .set({ ...data, updatedAt: new Date().toISOString() })
+      .set({ ...data, version: oldSupplier.version + 1, updatedAt: new Date().toISOString() })
       .where(eq(schema.suppliers.id, id))
       .returning()
       .get()
@@ -86,7 +157,7 @@ export function registerSupplierHandlers(): void {
     const changes: Record<string, { old: unknown; new: unknown }> = {}
     if (oldSupplier) {
       Object.keys(data).forEach((key) => {
-        if (oldSupplier[key] !== data[key]) {
+        if (key !== 'version' && oldSupplier[key] !== data[key]) {
           changes[key] = { old: oldSupplier[key], new: data[key] }
         }
       })

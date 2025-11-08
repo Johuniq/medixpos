@@ -6,10 +6,12 @@
 
 import AddIcon from '@mui/icons-material/Add'
 import CategoryIcon from '@mui/icons-material/Category'
+import CloudDownloadIcon from '@mui/icons-material/CloudDownload'
 import UploadIcon from '@mui/icons-material/Upload'
 import { Box, Button, Container, Paper, Typography } from '@mui/material'
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
+import ExportModal from '../components/export/ExportModal'
 import BulkImportModal from '../components/products/BulkImportModal'
 import ProductBarcodeModal from '../components/products/ProductBarcodeModal'
 import ProductFilters from '../components/products/ProductFilters'
@@ -30,9 +32,15 @@ export default function Products(): React.JSX.Element {
   const [showModal, setShowModal] = useState(false)
   const [showBarcodeModal, setShowBarcodeModal] = useState(false)
   const [showBulkImportModal, setShowBulkImportModal] = useState(false)
+  const [showExportModal, setShowExportModal] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // Pagination state
+  const [page, setPage] = useState(1)
+  const [totalRecords, setTotalRecords] = useState(0)
+  const [limit] = useState(50)
 
   // Get currency symbol
   const getCurrencySymbol = (): string => {
@@ -56,21 +64,22 @@ export default function Products(): React.JSX.Element {
     const loadData = async (): Promise<void> => {
       try {
         setLoading(true)
-        const [productsData, categoriesData, suppliersData, unitsData, inventoryData] =
+        const [productsResponse, categoriesData, suppliersData, unitsData, inventoryData] =
           await Promise.all([
-            window.api.products.getAll(),
+            window.api.products.getPaginated({ page, limit, search: searchTerm }),
             window.api.categories.getAll(),
             window.api.suppliers.getAll(),
             window.api.units.getAll(),
             window.api.inventory.getAll()
           ])
-        const typedProducts = productsData as unknown as Product[]
+        const typedProducts = productsResponse.data as unknown as Product[]
         const typedCategories = categoriesData as unknown as Category[]
         const typedSuppliers = suppliersData as unknown as Supplier[]
         const typedUnits = unitsData as unknown as Unit[]
         const typedInventory = inventoryData as unknown as InventoryItem[]
 
         setProducts(typedProducts)
+        setTotalRecords(productsResponse.total)
         setCategories(typedCategories)
         setSuppliers(typedSuppliers)
         setUnits(typedUnits)
@@ -94,26 +103,27 @@ export default function Products(): React.JSX.Element {
     }
 
     loadData()
-  }, [])
+  }, [page, limit, searchTerm])
 
   const reloadData = async (): Promise<void> => {
     try {
       setLoading(true)
-      const [productsData, categoriesData, suppliersData, unitsData, inventoryData] =
+      const [productsResponse, categoriesData, suppliersData, unitsData, inventoryData] =
         await Promise.all([
-          window.api.products.getAll(),
+          window.api.products.getPaginated({ page, limit, search: searchTerm }),
           window.api.categories.getAll(),
           window.api.suppliers.getAll(),
           window.api.units.getAll(),
           window.api.inventory.getAll()
         ])
-      const typedProducts = productsData as unknown as Product[]
+      const typedProducts = productsResponse.data as unknown as Product[]
       const typedCategories = categoriesData as unknown as Category[]
       const typedSuppliers = suppliersData as unknown as Supplier[]
       const typedUnits = unitsData as unknown as Unit[]
       const typedInventory = inventoryData as unknown as InventoryItem[]
 
       setProducts(typedProducts)
+      setTotalRecords(productsResponse.total)
       setCategories(typedCategories)
       setSuppliers(typedSuppliers)
       setUnits(typedUnits)
@@ -136,13 +146,19 @@ export default function Products(): React.JSX.Element {
     }
   }
 
-  const filteredProducts = products.filter(
-    (product) =>
-      (product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (product.barcode && product.barcode.toLowerCase().includes(searchTerm.toLowerCase()))) &&
-      (categoryFilter === '' || product.categoryId === categoryFilter)
-  )
+  // Client-side category filtering on already paginated data
+  const filteredProducts = categoryFilter
+    ? products.filter((product) => product.categoryId === categoryFilter)
+    : products
+
+  const handlePageChange = (newPage: number): void => {
+    setPage(newPage)
+  }
+
+  const handleSearchChange = (search: string): void => {
+    setSearchTerm(search)
+    setPage(1) // Reset to first page on search
+  }
 
   const handleSubmit = async (formData: ProductFormData): Promise<void> => {
     if (!formData.name || !formData.sku || formData.sellingPrice <= 0) {
@@ -163,7 +179,12 @@ export default function Products(): React.JSX.Element {
       }
 
       if (editingProduct) {
-        await window.api.products.update(editingProduct.id, productData)
+        // Include version for optimistic locking
+        const updateData = {
+          ...productData,
+          version: editingProduct.version
+        }
+        await window.api.products.update(editingProduct.id, updateData)
         // Update inventory quantity
         await window.api.inventory.updateQuantity(editingProduct.id, formData.stockQuantity)
         toast.success('Product updated successfully')
@@ -179,7 +200,14 @@ export default function Products(): React.JSX.Element {
     } catch (error) {
       console.error('Error saving product:', error)
       if (error instanceof Error) {
-        toast.error(`Failed to save product: ${error.message}`)
+        // Handle concurrent edit error
+        if (error.message.includes('CONCURRENT_EDIT')) {
+          toast.error('This product was modified by another user. Please refresh and try again.')
+          reloadData() // Auto-refresh the data
+          handleCloseModal()
+        } else {
+          toast.error(`Failed to save product: ${error.message}`)
+        }
       } else {
         toast.error('Failed to save product')
       }
@@ -251,7 +279,7 @@ export default function Products(): React.JSX.Element {
               searchTerm={searchTerm}
               categoryFilter={categoryFilter}
               categories={categories}
-              onSearchChange={setSearchTerm}
+              onSearchChange={handleSearchChange}
               onCategoryFilterChange={setCategoryFilter}
             />
           </div>
@@ -281,13 +309,21 @@ export default function Products(): React.JSX.Element {
         </Box>
       </Paper>
 
-      {/* Table Header with Bulk Import */}
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+      {/* Table Header with Bulk Import & Export */}
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2, gap: 2 }}>
         <div data-tour="export-import">
+          <Button
+            variant="outlined"
+            startIcon={<CloudDownloadIcon />}
+            onClick={() => setShowExportModal(true)}
+          >
+            Export Data
+          </Button>
           <Button
             variant="outlined"
             startIcon={<UploadIcon />}
             onClick={() => setShowBulkImportModal(true)}
+            sx={{ ml: 2 }}
           >
             Bulk Import
           </Button>
@@ -305,6 +341,10 @@ export default function Products(): React.JSX.Element {
           onEdit={handleEdit}
           onDelete={handleDelete}
           onViewBarcode={handleViewBarcode}
+          page={page}
+          totalRecords={totalRecords}
+          limit={limit}
+          onPageChange={handlePageChange}
         />
       </div>
 
@@ -333,6 +373,13 @@ export default function Products(): React.JSX.Element {
         isOpen={showBulkImportModal}
         onClose={() => setShowBulkImportModal(false)}
         onImportComplete={reloadData}
+      />
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        defaultExportType="products"
       />
     </Container>
   )

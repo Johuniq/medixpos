@@ -18,6 +18,7 @@ export interface BankAccount {
   totalWithdrawals: number
   description?: string
   isActive: boolean
+  version: number // Optimistic locking version
 }
 
 export interface BankAccountFormData {

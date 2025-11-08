@@ -14,9 +14,11 @@ import PaymentPanel from '../components/pos/PaymentPanel'
 import ProductGrid from '../components/pos/ProductGrid'
 import QuickProductSearch from '../components/pos/QuickProductSearch'
 import SaleCompleteDialog from '../components/pos/SaleCompleteDialog'
+import { useBarcodeScanner } from '../hooks/useBarcodeScanner'
 import { useKeyboardShortcuts, useKeyboardWorkflow } from '../hooks/useKeyboardWorkflow'
 import { usePOS } from '../hooks/usePOS'
 import { useSettingsStore } from '../store/settingsStore'
+import { Product } from '../types/pos'
 import { printPDFReceipt } from '../utils/pdfPrint'
 import { printThermalReceipt } from '../utils/thermalPrint'
 
@@ -71,6 +73,20 @@ export default function POS(): React.JSX.Element {
 
   // Keyboard workflow hooks
   const keyboard = useKeyboardWorkflow()
+
+  // Barcode scanner integration - automatically adds scanned products to cart
+  useBarcodeScanner((result) => {
+    // result.product is already validated and returned from the hook
+    if (result.product) {
+      // Cast the product as it comes from the API
+      const product = result.product as Product
+      addToCart(product)
+      toast.success(`Added ${product.name} to cart via barcode scan`, {
+        icon: '📦',
+        duration: 2000
+      })
+    }
+  }, true) // Enable scanner by default
 
   // Define keyboard shortcuts
   const shortcuts = {

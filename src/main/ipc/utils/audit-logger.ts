@@ -11,9 +11,12 @@ import * as schema from '../../database/schema'
 
 /**
  * Helper function to create audit logs for tracking entity changes
+ * Accepts either a database connection or a transaction
  */
 export function createAuditLog(
-  db: ReturnType<typeof getDatabase>,
+  db:
+    | ReturnType<typeof getDatabase>
+    | Parameters<Parameters<ReturnType<typeof getDatabase>['transaction']>[0]>[0],
   data: {
     userId?: string
     username?: string

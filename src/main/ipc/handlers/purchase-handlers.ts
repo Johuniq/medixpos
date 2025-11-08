@@ -4,12 +4,28 @@
  * Unauthorized use, copying, or distribution is strictly prohibited.
  */
 
-import { and, desc, eq, gte, lte } from 'drizzle-orm'
+import { and, desc, eq, gte, like, lte, or, sql, SQL } from 'drizzle-orm'
 import { ipcMain } from 'electron'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../../database'
 import * as schema from '../../database/schema'
 import { createAuditLog } from '../utils/audit-logger'
+
+interface PaginationParams {
+  page?: number
+  limit?: number
+  startDate?: string
+  endDate?: string
+  search?: string
+}
+
+interface PaginatedResponse<T> {
+  data: T[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
 
 export function registerPurchaseHandlers(): void {
   const db = getDatabase()
@@ -18,203 +34,296 @@ export function registerPurchaseHandlers(): void {
 
   // Create new purchase
   ipcMain.handle('db:purchases:create', async (_, { purchase, items }) => {
-    const purchaseId = uuidv4()
-    const purchaseResult = db
-      .insert(schema.purchases)
-      .values({ id: purchaseId, ...purchase })
-      .returning()
-      .get()
+    // Wrap entire purchase creation in a transaction to ensure atomicity
+    return db.transaction((tx) => {
+      try {
+        const purchaseId = uuidv4()
+        const purchaseResult = tx
+          .insert(schema.purchases)
+          .values({ id: purchaseId, ...purchase })
+          .returning()
+          .get()
 
-    // Insert purchase items with product names and subtotals
-    const purchaseItemsData = items.map((item) => {
-      // Get product name
-      const product = db
-        .select({ name: schema.products.name })
-        .from(schema.products)
-        .where(eq(schema.products.id, item.productId))
-        .get()
+        // Insert purchase items with product names and subtotals
+        const purchaseItemsData = items.map((item) => {
+          // Get product name
+          const product = tx
+            .select({ name: schema.products.name })
+            .from(schema.products)
+            .where(eq(schema.products.id, item.productId))
+            .get()
 
-      const productName = product?.name || 'Unknown Product'
-      const subtotal = item.quantity * item.unitPrice
-      const discountPercent = item.discountPercent || 0
-      const taxRate = item.taxRate || 0
+          const productName = product?.name || 'Unknown Product'
+          const subtotal = item.quantity * item.unitPrice
+          const discountPercent = item.discountPercent || 0
+          const taxRate = item.taxRate || 0
 
-      return {
-        id: uuidv4(),
-        purchaseId,
-        productId: item.productId,
-        productName,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        discountPercent,
-        taxRate,
-        subtotal,
-        batchNumber: item.batchNumber || null,
-        expiryDate: item.expiryDate || null,
-        manufactureDate: item.manufactureDate || null
-      }
-    })
-
-    if (purchaseItemsData.length > 0) {
-      db.insert(schema.purchaseItems).values(purchaseItemsData).run()
-    }
-
-    // Update inventory (convert package units to base units)
-    for (const item of items) {
-      // Get product to check for package unit conversion
-      const product = db
-        .select()
-        .from(schema.products)
-        .where(eq(schema.products.id, item.productId))
-        .get()
-
-      // Calculate actual quantity in base units
-      // If product has package units, multiply purchase quantity by unitsPerPackage
-      let actualQuantity = item.quantity
-      if (product && product.unitsPerPackage && product.unitsPerPackage > 1) {
-        actualQuantity = item.quantity * product.unitsPerPackage
-      }
-
-      const existing = db
-        .select()
-        .from(schema.inventory)
-        .where(eq(schema.inventory.productId, item.productId))
-        .get()
-
-      if (existing) {
-        db.update(schema.inventory)
-          .set({
-            quantity: existing.quantity + actualQuantity,
-            batchNumber: item.batchNumber,
-            expiryDate: item.expiryDate,
-            manufactureDate: item.manufactureDate,
-            updatedAt: new Date().toISOString()
-          })
-          .where(eq(schema.inventory.id, existing.id))
-          .run()
-      } else {
-        const id = uuidv4()
-        db.insert(schema.inventory)
-          .values({
-            id,
+          return {
+            id: uuidv4(),
+            purchaseId,
             productId: item.productId,
-            quantity: actualQuantity,
-            batchNumber: item.batchNumber,
-            expiryDate: item.expiryDate,
-            manufactureDate: item.manufactureDate
-          })
-          .run()
-      }
-    }
+            productName,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            discountPercent,
+            taxRate,
+            subtotal,
+            batchNumber: item.batchNumber || null,
+            expiryDate: item.expiryDate || null,
+            manufactureDate: item.manufactureDate || null
+          }
+        })
 
-    // Update bank account balance if accountId is provided (deduct money)
-    if (purchase.accountId && purchase.paidAmount > 0) {
-      const account = db
-        .select()
-        .from(schema.bankAccounts)
-        .where(eq(schema.bankAccounts.id, purchase.accountId))
-        .get()
+        if (purchaseItemsData.length > 0) {
+          tx.insert(schema.purchaseItems).values(purchaseItemsData).run()
+        }
 
-      if (account) {
-        const currentBalance = account.currentBalance ?? 0
-        const totalWithdrawals = account.totalWithdrawals ?? 0
+        // Update inventory (convert package units to base units)
+        for (const item of items) {
+          // Get product to check for package unit conversion
+          const product = tx
+            .select()
+            .from(schema.products)
+            .where(eq(schema.products.id, item.productId))
+            .get()
 
-        db.update(schema.bankAccounts)
+          if (!product) {
+            throw new Error(`Product not found: ${item.productId}`)
+          }
+
+          // Calculate actual quantity in base units
+          // If product has package units, multiply purchase quantity by unitsPerPackage
+          let actualQuantity = item.quantity
+          if (product.unitsPerPackage && product.unitsPerPackage > 1) {
+            actualQuantity = item.quantity * product.unitsPerPackage
+          }
+
+          const existing = tx
+            .select()
+            .from(schema.inventory)
+            .where(eq(schema.inventory.productId, item.productId))
+            .get()
+
+          if (existing) {
+            tx.update(schema.inventory)
+              .set({
+                quantity: existing.quantity + actualQuantity,
+                batchNumber: item.batchNumber,
+                expiryDate: item.expiryDate,
+                manufactureDate: item.manufactureDate,
+                updatedAt: new Date().toISOString()
+              })
+              .where(eq(schema.inventory.id, existing.id))
+              .run()
+          } else {
+            const id = uuidv4()
+            tx.insert(schema.inventory)
+              .values({
+                id,
+                productId: item.productId,
+                quantity: actualQuantity,
+                batchNumber: item.batchNumber,
+                expiryDate: item.expiryDate,
+                manufactureDate: item.manufactureDate
+              })
+              .run()
+          }
+        }
+
+        // Update bank account balance if accountId is provided (deduct money)
+        if (purchase.accountId && purchase.paidAmount > 0) {
+          const account = tx
+            .select()
+            .from(schema.bankAccounts)
+            .where(eq(schema.bankAccounts.id, purchase.accountId))
+            .get()
+
+          if (!account) {
+            throw new Error(`Bank account not found: ${purchase.accountId}`)
+          }
+
+          const currentBalance = account.currentBalance ?? 0
+          const totalWithdrawals = account.totalWithdrawals ?? 0
+
+          // Check for sufficient funds
+          if (currentBalance < purchase.paidAmount) {
+            throw new Error(
+              `Insufficient funds in bank account. Available: ${currentBalance}, Required: ${purchase.paidAmount}`
+            )
+          }
+
+          tx.update(schema.bankAccounts)
+            .set({
+              currentBalance: currentBalance - purchase.paidAmount,
+              totalWithdrawals: totalWithdrawals + purchase.paidAmount,
+              updatedAt: new Date().toISOString()
+            })
+            .where(eq(schema.bankAccounts.id, purchase.accountId))
+            .run()
+        }
+
+        // Update supplier balance
+        const supplier = tx
+          .select()
+          .from(schema.suppliers)
+          .where(eq(schema.suppliers.id, purchase.supplierId))
+          .get()
+
+        if (!supplier) {
+          throw new Error(`Supplier not found: ${purchase.supplierId}`)
+        }
+
+        const currentBalance = supplier.currentBalance ?? 0
+        const totalPurchases = supplier.totalPurchases ?? 0
+        const totalPayments = supplier.totalPayments ?? 0
+
+        // Add purchase amount (increases payable), subtract paid amount (reduces payable)
+        const netBalanceChange = purchase.totalAmount - (purchase.paidAmount || 0)
+
+        tx.update(schema.suppliers)
           .set({
-            currentBalance: currentBalance - purchase.paidAmount,
-            totalWithdrawals: totalWithdrawals + purchase.paidAmount,
+            currentBalance: currentBalance + netBalanceChange,
+            totalPurchases: totalPurchases + purchase.totalAmount,
+            totalPayments: totalPayments + (purchase.paidAmount || 0),
             updatedAt: new Date().toISOString()
           })
-          .where(eq(schema.bankAccounts.id, purchase.accountId))
+          .where(eq(schema.suppliers.id, purchase.supplierId))
           .run()
-      }
-    }
 
-    // Update supplier balance
-    const supplier = db
-      .select()
-      .from(schema.suppliers)
-      .where(eq(schema.suppliers.id, purchase.supplierId))
-      .get()
+        // Create ledger entry for purchase
+        const purchaseLedgerId = uuidv4()
+        let runningBalance = currentBalance + purchase.totalAmount
 
-    if (supplier) {
-      const currentBalance = supplier.currentBalance ?? 0
-      const totalPurchases = supplier.totalPurchases ?? 0
-      const totalPayments = supplier.totalPayments ?? 0
+        // Calculate total balance including opening balance
+        const openingBalance = supplier.openingBalance ?? 0
 
-      // Add purchase amount (increases payable), subtract paid amount (reduces payable)
-      const netBalanceChange = purchase.totalAmount - (purchase.paidAmount || 0)
-
-      db.update(schema.suppliers)
-        .set({
-          currentBalance: currentBalance + netBalanceChange,
-          totalPurchases: totalPurchases + purchase.totalAmount,
-          totalPayments: totalPayments + (purchase.paidAmount || 0),
-          updatedAt: new Date().toISOString()
-        })
-        .where(eq(schema.suppliers.id, purchase.supplierId))
-        .run()
-
-      // Create ledger entry for purchase
-      const purchaseLedgerId = uuidv4()
-      let runningBalance = currentBalance + purchase.totalAmount
-
-      // Calculate total balance including opening balance
-      const openingBalance = supplier.openingBalance ?? 0
-
-      db.insert(schema.supplierLedgerEntries)
-        .values({
-          id: purchaseLedgerId,
-          supplierId: purchase.supplierId,
-          type: 'purchase',
-          referenceId: purchaseId,
-          referenceNumber: purchase.invoiceNumber,
-          description: `Purchase: ${purchase.notes || 'Goods purchased'}`,
-          debit: purchase.totalAmount,
-          credit: 0,
-          balance: openingBalance + runningBalance,
-          transactionDate: new Date().toISOString().split('T')[0],
-          createdBy: purchase.userId
-        })
-        .run()
-
-      // If payment was made, create a payment ledger entry
-      if (purchase.paidAmount && purchase.paidAmount > 0) {
-        const paymentLedgerId = uuidv4()
-        runningBalance = runningBalance - purchase.paidAmount
-
-        db.insert(schema.supplierLedgerEntries)
+        tx.insert(schema.supplierLedgerEntries)
           .values({
-            id: paymentLedgerId,
+            id: purchaseLedgerId,
             supplierId: purchase.supplierId,
-            type: 'payment',
+            type: 'purchase',
             referenceId: purchaseId,
-            referenceNumber: `Payment for ${purchase.invoiceNumber}`,
-            description: `Payment for purchase ${purchase.invoiceNumber}`,
-            debit: 0,
-            credit: purchase.paidAmount,
+            referenceNumber: purchase.invoiceNumber,
+            description: `Purchase: ${purchase.notes || 'Goods purchased'}`,
+            debit: purchase.totalAmount,
+            credit: 0,
             balance: openingBalance + runningBalance,
             transactionDate: new Date().toISOString().split('T')[0],
             createdBy: purchase.userId
           })
           .run()
+
+        // If payment was made, create a payment ledger entry
+        if (purchase.paidAmount && purchase.paidAmount > 0) {
+          const paymentLedgerId = uuidv4()
+          runningBalance = runningBalance - purchase.paidAmount
+
+          tx.insert(schema.supplierLedgerEntries)
+            .values({
+              id: paymentLedgerId,
+              supplierId: purchase.supplierId,
+              type: 'payment',
+              referenceId: purchaseId,
+              referenceNumber: `Payment for ${purchase.invoiceNumber}`,
+              description: `Payment for purchase ${purchase.invoiceNumber}`,
+              debit: 0,
+              credit: purchase.paidAmount,
+              balance: openingBalance + runningBalance,
+              transactionDate: new Date().toISOString().split('T')[0],
+              createdBy: purchase.userId
+            })
+            .run()
+        }
+
+        // Create audit log
+        createAuditLog(tx, {
+          userId: purchase.userId,
+          action: 'create',
+          entityType: 'purchase',
+          entityId: purchaseId,
+          entityName: purchaseResult.invoiceNumber,
+          changes: { totalAmount: purchase.totalAmount, items: items.length }
+        })
+
+        return purchaseResult
+      } catch (error) {
+        // Transaction will automatically rollback on error
+        console.error('[Purchases] Transaction failed, rolling back:', error)
+        throw error
       }
-    }
-
-    // Create audit log
-    createAuditLog(db, {
-      userId: purchase.userId,
-      action: 'create',
-      entityType: 'purchase',
-      entityId: purchaseId,
-      entityName: purchaseResult.invoiceNumber,
-      changes: { totalAmount: purchase.totalAmount, items: items.length }
     })
-
-    return purchaseResult
   })
 
-  // Get all purchases (with optional date range)
+  // Get paginated purchases
+  ipcMain.handle(
+    'db:purchases:getPaginated',
+    async (_, params: PaginationParams): Promise<PaginatedResponse<unknown>> => {
+      const page = params.page || 1
+      const limit = params.limit || 50
+      const offset = (page - 1) * limit
+      const { startDate, endDate, search } = params
+
+      // Build where conditions
+      const conditions: SQL<unknown>[] = []
+      if (startDate && endDate) {
+        conditions.push(
+          and(gte(schema.purchases.createdAt, startDate), lte(schema.purchases.createdAt, endDate))!
+        )
+      }
+      if (search) {
+        conditions.push(
+          sql`(${schema.purchases.invoiceNumber} LIKE ${`%${search}%`} OR ${schema.suppliers.name} LIKE ${`%${search}%`})`
+        )
+      }
+
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined
+
+      // Get total count
+      const countQuery = db
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.purchases)
+        .leftJoin(schema.suppliers, eq(schema.purchases.supplierId, schema.suppliers.id))
+
+      const countResult = whereClause ? countQuery.where(whereClause).get() : countQuery.get()
+      const total = countResult?.count || 0
+
+      // Get paginated data with supplier info
+      const dataQuery = db
+        .select({
+          id: schema.purchases.id,
+          invoiceNumber: schema.purchases.invoiceNumber,
+          supplierId: schema.purchases.supplierId,
+          supplierName: schema.suppliers.name,
+          accountId: schema.purchases.accountId,
+          userId: schema.purchases.userId,
+          subtotal: schema.purchases.subtotal,
+          taxAmount: schema.purchases.taxAmount,
+          discountAmount: schema.purchases.discountAmount,
+          totalAmount: schema.purchases.totalAmount,
+          paidAmount: schema.purchases.paidAmount,
+          paymentStatus: schema.purchases.paymentStatus,
+          notes: schema.purchases.notes,
+          createdAt: schema.purchases.createdAt
+        })
+        .from(schema.purchases)
+        .leftJoin(schema.suppliers, eq(schema.purchases.supplierId, schema.suppliers.id))
+        .orderBy(desc(schema.purchases.createdAt))
+        .limit(limit)
+        .offset(offset)
+
+      const data = whereClause ? dataQuery.where(whereClause).all() : dataQuery.all()
+
+      return {
+        data,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    }
+  )
+
+  // Get all purchases (with optional date range) - kept for backward compatibility
   ipcMain.handle('db:purchases:getAll', async (_, { startDate, endDate }) => {
     let purchases
     if (startDate && endDate) {
@@ -454,6 +563,110 @@ export function registerPurchaseHandlers(): void {
 
     return returnResult
   })
+
+  // Get paginated purchase returns
+  ipcMain.handle(
+    'db:purchaseReturns:getPaginated',
+    async (
+      _,
+      {
+        page = 1,
+        limit = 50,
+        search,
+        startDate,
+        endDate
+      }: {
+        page?: number
+        limit?: number
+        search?: string
+        startDate?: string
+        endDate?: string
+      } = {}
+    ) => {
+      try {
+        // Build conditions
+        const conditions: SQL<unknown>[] = []
+
+        if (startDate) {
+          conditions.push(gte(schema.purchaseReturns.createdAt, startDate))
+        }
+
+        if (endDate) {
+          conditions.push(lte(schema.purchaseReturns.createdAt, endDate))
+        }
+
+        if (search) {
+          conditions.push(
+            or(
+              like(schema.purchaseReturns.returnNumber, `%${search}%`),
+              like(schema.suppliers.name, `%${search}%`),
+              like(schema.purchases.invoiceNumber, `%${search}%`)
+            )!
+          )
+        }
+
+        // Get total count
+        const countQuery = db
+          .select({ count: sql<number>`count(*)` })
+          .from(schema.purchaseReturns)
+          .leftJoin(schema.suppliers, eq(schema.purchaseReturns.supplierId, schema.suppliers.id))
+          .leftJoin(schema.purchases, eq(schema.purchaseReturns.purchaseId, schema.purchases.id))
+
+        const totalResult =
+          conditions.length > 0 ? countQuery.where(and(...conditions)!).get() : countQuery.get()
+
+        const total = totalResult?.count || 0
+
+        // Get paginated data
+        const offset = (page - 1) * limit
+        const dataQuery = db
+          .select({
+            purchaseReturn: schema.purchaseReturns,
+            supplier: {
+              id: schema.suppliers.id,
+              name: schema.suppliers.name
+            },
+            purchase: {
+              id: schema.purchases.id,
+              invoiceNumber: schema.purchases.invoiceNumber
+            },
+            user: {
+              id: schema.users.id,
+              username: schema.users.username
+            },
+            account: {
+              id: schema.bankAccounts.id,
+              name: schema.bankAccounts.name
+            }
+          })
+          .from(schema.purchaseReturns)
+          .leftJoin(schema.suppliers, eq(schema.purchaseReturns.supplierId, schema.suppliers.id))
+          .leftJoin(schema.purchases, eq(schema.purchaseReturns.purchaseId, schema.purchases.id))
+          .leftJoin(schema.users, eq(schema.purchaseReturns.userId, schema.users.id))
+          .leftJoin(
+            schema.bankAccounts,
+            eq(schema.purchaseReturns.accountId, schema.bankAccounts.id)
+          )
+          .orderBy(desc(schema.purchaseReturns.createdAt))
+          .limit(limit)
+          .offset(offset)
+
+        const data =
+          conditions.length > 0 ? dataQuery.where(and(...conditions)!).all() : dataQuery.all()
+
+        return {
+          data,
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit)
+        }
+      } catch (error) {
+        console.error('Error fetching paginated purchase returns:', error)
+        throw error
+      }
+    }
+  )
 
   // Get all purchase returns (with optional date range)
   ipcMain.handle('db:purchaseReturns:getAll', async (_, { startDate, endDate }) => {

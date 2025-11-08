@@ -66,6 +66,7 @@ export const suppliers = sqliteTable('suppliers', {
   creditLimit: real('credit_limit').default(0), // Maximum credit allowed
   creditDays: integer('credit_days').default(0), // Payment terms in days
   isActive: integer('is_active', { mode: 'boolean' }).default(true),
+  version: integer('version').notNull().default(1), // Optimistic locking version
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
 })
@@ -85,6 +86,7 @@ export const bankAccounts = sqliteTable('bank_accounts', {
   totalWithdrawals: real('total_withdrawals').default(0), // Total withdrawals/deductions
   description: text('description'), // Notes/description
   isActive: integer('is_active', { mode: 'boolean' }).default(true),
+  version: integer('version').notNull().default(1), // Optimistic locking version
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
 })
@@ -113,6 +115,7 @@ export const products = sqliteTable('products', {
   imageUrl: text('image_url'), // Product image URL or path
   shelf: text('shelf').notNull().default('A1'), // Shelf location identifier (e.g., A1, B2, C3)
   isActive: integer('is_active', { mode: 'boolean' }).default(true),
+  version: integer('version').notNull().default(1), // Optimistic locking version
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
 })
@@ -127,6 +130,7 @@ export const inventory = sqliteTable('inventory', {
   quantity: integer('quantity').notNull().default(0),
   expiryDate: text('expiry_date'),
   manufactureDate: text('manufacture_date'),
+  version: integer('version').notNull().default(1), // Optimistic locking version
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
 })
@@ -145,6 +149,7 @@ export const customers = sqliteTable('customers', {
   allergies: text('allergies'),
   notes: text('notes'),
   isActive: integer('is_active', { mode: 'boolean' }).default(true),
+  version: integer('version').notNull().default(1), // Optimistic locking version
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
 })

@@ -71,6 +71,13 @@ interface API {
   }
   suppliers: {
     getAll: () => Promise<Record<string, unknown>[]>
+    getPaginated: (params: { page?: number; limit?: number; search?: string }) => Promise<{
+      data: Record<string, unknown>[]
+      total: number
+      page: number
+      limit: number
+      totalPages: number
+    }>
     create: (data: Record<string, unknown>) => Promise<Record<string, unknown>>
     update: (id: string, data: Record<string, unknown>) => Promise<Record<string, unknown>>
     delete: (id: string) => Promise<void>
@@ -93,6 +100,13 @@ interface API {
   }
   bankAccounts: {
     getAll: () => Promise<Record<string, unknown>[]>
+    getPaginated: (params: { page?: number; limit?: number; search?: string }) => Promise<{
+      data: Record<string, unknown>[]
+      total: number
+      page: number
+      limit: number
+      totalPages: number
+    }>
     create: (data: Record<string, unknown>) => Promise<Record<string, unknown>>
     update: (id: string, data: Record<string, unknown>) => Promise<Record<string, unknown>>
     delete: (id: string) => Promise<void>
@@ -106,6 +120,13 @@ interface API {
   }
   products: {
     getAll: (search?: string) => Promise<Record<string, unknown>[]>
+    getPaginated: (params: { page?: number; limit?: number; search?: string }) => Promise<{
+      data: Record<string, unknown>[]
+      total: number
+      page: number
+      limit: number
+      totalPages: number
+    }>
     getById: (id: string) => Promise<Record<string, unknown>>
     getByBarcode: (barcode: string) => Promise<Record<string, unknown>>
     search: (search: string) => Promise<Record<string, unknown>[]>
@@ -115,11 +136,29 @@ interface API {
   }
   inventory: {
     getAll: () => Promise<Record<string, unknown>[]>
+    getPaginated: (params: { page?: number; limit?: number; search?: string }) => Promise<{
+      data: Record<string, unknown>[]
+      total: number
+      page: number
+      limit: number
+      totalPages: number
+    }>
     getLowStock: () => Promise<Record<string, unknown>[]>
-    updateQuantity: (productId: string, quantity: number) => Promise<Record<string, unknown>>
+    updateQuantity: (
+      productId: string,
+      quantity: number,
+      options?: { userId?: string; username?: string; version?: number }
+    ) => Promise<Record<string, unknown>>
   }
   customers: {
     getAll: (search?: string) => Promise<Record<string, unknown>[]>
+    getPaginated: (params: { page?: number; limit?: number; search?: string }) => Promise<{
+      data: Record<string, unknown>[]
+      total: number
+      page: number
+      limit: number
+      totalPages: number
+    }>
     getById: (id: string) => Promise<Record<string, unknown>>
     getByPhone: (phone: string) => Promise<Record<string, unknown>>
     create: (data: Record<string, unknown>) => Promise<Record<string, unknown>>
@@ -129,6 +168,18 @@ interface API {
   }
   prescriptions: {
     getAll: (customerId?: string) => Promise<Record<string, unknown>[]>
+    getPaginated: (params: {
+      page?: number
+      limit?: number
+      search?: string
+      customerId?: string
+    }) => Promise<{
+      data: Record<string, unknown>[]
+      total: number
+      page: number
+      limit: number
+      totalPages: number
+    }>
     getById: (id: string) => Promise<Record<string, unknown>>
     getByCustomer: (customerId: string) => Promise<Record<string, unknown>[]>
     create: (data: Record<string, unknown>) => Promise<Record<string, unknown>>
@@ -147,6 +198,19 @@ interface API {
       items: Record<string, unknown>[]
     ) => Promise<Record<string, unknown>>
     getAll: (startDate?: string, endDate?: string) => Promise<Record<string, unknown>[]>
+    getPaginated: (params: {
+      page?: number
+      limit?: number
+      startDate?: string
+      endDate?: string
+      search?: string
+    }) => Promise<{
+      data: Record<string, unknown>[]
+      total: number
+      page: number
+      limit: number
+      totalPages: number
+    }>
     getById: (id: string) => Promise<Record<string, unknown>>
     getByCustomer: (customerId: string) => Promise<Record<string, unknown>[]>
   }
@@ -156,6 +220,19 @@ interface API {
       items: Record<string, unknown>[]
     ) => Promise<Record<string, unknown>>
     getAll: (startDate?: string, endDate?: string) => Promise<Record<string, unknown>[]>
+    getPaginated: (params: {
+      page?: number
+      limit?: number
+      search?: string
+      startDate?: string
+      endDate?: string
+    }) => Promise<{
+      data: Record<string, unknown>[]
+      total: number
+      page: number
+      limit: number
+      totalPages: number
+    }>
     getById: (id: string) => Promise<Record<string, unknown>>
   }
   purchases: {
@@ -164,6 +241,19 @@ interface API {
       items: Record<string, unknown>[]
     ) => Promise<Record<string, unknown>>
     getAll: (startDate?: string, endDate?: string) => Promise<Record<string, unknown>[]>
+    getPaginated: (params: {
+      page?: number
+      limit?: number
+      startDate?: string
+      endDate?: string
+      search?: string
+    }) => Promise<{
+      data: Record<string, unknown>[]
+      total: number
+      page: number
+      limit: number
+      totalPages: number
+    }>
     getById: (id: string) => Promise<Record<string, unknown>>
     delete: (id: string, userId: string) => Promise<{ success: boolean; message: string }>
   }
@@ -173,15 +263,54 @@ interface API {
       items: Record<string, unknown>[]
     ) => Promise<Record<string, unknown>>
     getAll: (startDate?: string, endDate?: string) => Promise<Record<string, unknown>[]>
+    getPaginated: (params: {
+      page?: number
+      limit?: number
+      search?: string
+      startDate?: string
+      endDate?: string
+    }) => Promise<{
+      data: Record<string, unknown>[]
+      total: number
+      page: number
+      limit: number
+      totalPages: number
+    }>
     getById: (id: string) => Promise<Record<string, unknown>>
   }
   damagedItems: {
     getAll: () => Promise<Record<string, unknown>[]>
+    getPaginated: (params: {
+      page?: number
+      limit?: number
+      search?: string
+      startDate?: string
+      endDate?: string
+    }) => Promise<{
+      data: Record<string, unknown>[]
+      total: number
+      page: number
+      limit: number
+      totalPages: number
+    }>
     create: (data: Record<string, unknown>) => Promise<Record<string, unknown>>
   }
   expenses: {
     create: (data: Record<string, unknown>) => Promise<Record<string, unknown>>
     getAll: (startDate?: string, endDate?: string) => Promise<Record<string, unknown>[]>
+    getPaginated: (params: {
+      page?: number
+      limit?: number
+      search?: string
+      startDate?: string
+      endDate?: string
+    }) => Promise<{
+      data: Record<string, unknown>[]
+      total: number
+      page: number
+      limit: number
+      totalPages: number
+    }>
   }
   settings: {
     getAll: () => Promise<Record<string, unknown>[]>
@@ -200,6 +329,17 @@ interface API {
       endDate: string,
       limit?: number
     ) => Promise<Record<string, unknown>[]>
+    profitMargin: (startDate: string, endDate: string) => Promise<Record<string, unknown>[]>
+    vendorPerformance: (startDate: string, endDate: string) => Promise<Record<string, unknown>[]>
+    employeePerformance: (startDate: string, endDate: string) => Promise<Record<string, unknown>[]>
+    slowMovingStock: (startDate: string, endDate: string) => Promise<Record<string, unknown>[]>
+    paymentMethodAnalysis: (
+      startDate: string,
+      endDate: string
+    ) => Promise<Record<string, unknown>[]>
+    peakHoursAnalysis: (startDate: string, endDate: string) => Promise<Record<string, unknown>[]>
+    customerRFMAnalysis: () => Promise<Record<string, unknown>[]>
+    yearOverYear: () => Promise<Record<string, unknown>>
   }
   auditLogs: {
     getAll: (filters?: {
@@ -457,6 +597,203 @@ interface API {
   }
   auth: {
     invalidateSession: (token: string | null | undefined) => Promise<{ success: boolean }>
+  }
+  autoUpdate: {
+    checkForUpdates: () => Promise<{ success: boolean; error?: string }>
+    downloadUpdate: () => Promise<{ success: boolean; error?: string }>
+    installUpdate: () => Promise<{ success: boolean; error?: string }>
+    getVersion: () => Promise<{ success: boolean; version: string }>
+    getStatus: () => Promise<{
+      success: boolean
+      status: {
+        isChecking: boolean
+        isDownloading: boolean
+        currentVersion: string
+      }
+    }>
+    onStatusChange: (callback: (event: string, data: Record<string, unknown>) => void) => void
+    removeStatusListener: () => void
+  }
+  barcode: {
+    validate: (barcode: string) => Promise<{
+      success: boolean
+      data?: {
+        isValid: boolean
+        format?: string
+        cleaned?: string
+        error?: string
+      }
+      error?: string
+    }>
+    searchProduct: (barcode: string) => Promise<{
+      success: boolean
+      data?: {
+        product: Record<string, unknown>
+        inventory?: Record<string, unknown>
+        barcode: string
+        format: string
+      }
+      error?: string
+      barcode?: string
+      format?: string
+    }>
+    getSettings: () => Promise<{
+      success: boolean
+      data?: Record<string, string>
+      error?: string
+    }>
+    updateSettings: (settings: Record<string, string>) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    test: (testBarcode: string) => Promise<{
+      success: boolean
+      data?: {
+        validation: {
+          isValid: boolean
+          format?: string
+          cleaned?: string
+          error?: string
+        }
+        searchResult?: Record<string, unknown>
+        timestamp: string
+      }
+      error?: string
+    }>
+    getHistory: () => Promise<{
+      success: boolean
+      data?: Array<Record<string, unknown>>
+      error?: string
+    }>
+    bulkValidate: (barcodes: string[]) => Promise<{
+      success: boolean
+      data?: Array<{
+        barcode: string
+        isValid: boolean
+        format?: string
+        cleaned?: string
+        error?: string
+      }>
+      error?: string
+    }>
+  }
+
+  cashDrawer: {
+    listPorts: () => Promise<{
+      success: boolean
+      ports?: Array<{ path: string; manufacturer?: string }>
+      error?: string
+    }>
+    connect: (
+      portPath: string,
+      baudRate?: number
+    ) => Promise<{
+      success: boolean
+      message?: string
+      error?: string
+    }>
+    disconnect: () => Promise<{
+      success: boolean
+      message?: string
+      error?: string
+    }>
+    open: (commandType?: 'STANDARD' | 'ALTERNATIVE' | 'EPSON' | 'STAR') => Promise<{
+      success: boolean
+      message?: string
+      error?: string
+    }>
+    test: () => Promise<{
+      success: boolean
+      message?: string
+      error?: string
+    }>
+    getStatus: () => Promise<{
+      success: boolean
+      status?: {
+        isConnected: boolean
+        portPath: string | null
+        baudRate: number
+      }
+      error?: string
+    }>
+    autoConnect: () => Promise<{
+      success: boolean
+      message?: string
+      error?: string
+    }>
+    reconnect: () => Promise<{
+      success: boolean
+      message?: string
+      error?: string
+    }>
+  }
+  export: {
+    products: (options: {
+      format: 'csv' | 'xlsx' | 'json'
+      startDate?: string
+      endDate?: string
+      filters?: Record<string, unknown>
+    }) => Promise<{
+      success: boolean
+      filePath?: string
+      error?: string
+      recordCount?: number
+    }>
+    customers: (options: {
+      format: 'csv' | 'xlsx' | 'json'
+      startDate?: string
+      endDate?: string
+      filters?: Record<string, unknown>
+    }) => Promise<{
+      success: boolean
+      filePath?: string
+      error?: string
+      recordCount?: number
+    }>
+    suppliers: (options: {
+      format: 'csv' | 'xlsx' | 'json'
+      startDate?: string
+      endDate?: string
+      filters?: Record<string, unknown>
+    }) => Promise<{
+      success: boolean
+      filePath?: string
+      error?: string
+      recordCount?: number
+    }>
+    inventory: (options: {
+      format: 'csv' | 'xlsx' | 'json'
+      startDate?: string
+      endDate?: string
+      filters?: Record<string, unknown>
+    }) => Promise<{
+      success: boolean
+      filePath?: string
+      error?: string
+      recordCount?: number
+    }>
+    sales: (options: {
+      format: 'csv' | 'xlsx' | 'json'
+      startDate?: string
+      endDate?: string
+      filters?: Record<string, unknown>
+    }) => Promise<{
+      success: boolean
+      filePath?: string
+      error?: string
+      recordCount?: number
+    }>
+    purchases: (options: {
+      format: 'csv' | 'xlsx' | 'json'
+      startDate?: string
+      endDate?: string
+      filters?: Record<string, unknown>
+    }) => Promise<{
+      success: boolean
+      filePath?: string
+      error?: string
+      recordCount?: number
+    }>
   }
 }
 

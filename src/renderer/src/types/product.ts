@@ -27,6 +27,7 @@ export interface Product {
   taxRate: number
   discountPercent: number
   isActive: boolean
+  version: number // Optimistic locking version
 }
 
 export interface InventoryItem {

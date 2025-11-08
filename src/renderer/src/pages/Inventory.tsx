@@ -7,11 +7,13 @@
 import { Box, Container, Typography } from '@mui/material'
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
+import ExportModal from '../components/export/ExportModal'
 import InventoryDetailsModal from '../components/inventory/InventoryDetailsModal'
 import InventoryFilters from '../components/inventory/InventoryFilters'
 import InventoryStats from '../components/inventory/InventoryStats'
 import InventoryTable from '../components/inventory/InventoryTable'
 import StockAdjustmentModal from '../components/inventory/StockAdjustmentModal'
+import { useAuthStore } from '../store/authStore'
 import { useSettingsStore } from '../store/settingsStore'
 import {
   Category,
@@ -30,9 +32,15 @@ export default function Inventory(): React.JSX.Element {
   const [filterType, setFilterType] = useState<'all' | 'low' | 'out'>('all')
   const [showModal, setShowModal] = useState(false)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
+  const [showExportModal, setShowExportModal] = useState(false)
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null)
   const [selectedItem, setSelectedItem] = useState<InventoryWithProduct | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // Pagination state
+  const [page, setPage] = useState(1)
+  const [totalRecords, setTotalRecords] = useState(0)
+  const [limit] = useState(50)
 
   // Get currency symbol
   const getCurrencySymbol = (): string => {
@@ -61,20 +69,22 @@ export default function Inventory(): React.JSX.Element {
 
   useEffect(() => {
     loadData()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, searchTerm])
 
   const loadData = async (): Promise<void> => {
     try {
       setLoading(true)
-      const [inventoryData, productsData, categoriesData] = await Promise.all([
-        window.api.inventory.getAll(),
+      const [inventoryResponse, productsData, categoriesData] = await Promise.all([
+        window.api.inventory.getPaginated({ page, limit, search: searchTerm }),
         window.api.products.getAll(),
         window.api.categories.getAll()
       ])
-      const typedInventory = inventoryData as unknown as InventoryItem[]
+      const typedInventory = inventoryResponse.data as unknown as InventoryItem[]
       const typedProducts = productsData as unknown as Product[]
       const typedCategories = categoriesData as unknown as Category[]
       setInventory(typedInventory)
+      setTotalRecords(inventoryResponse.total)
       setProducts(typedProducts)
       setCategories(typedCategories)
     } catch {
@@ -91,20 +101,26 @@ export default function Inventory(): React.JSX.Element {
     }))
     .filter((item) => item.product)
 
+  // Client-side filtering for low/out of stock (on already paginated data)
   const filteredInventory = inventoryWithProducts.filter((item) => {
     const product = item.product!
-    const matchesSearch =
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (product.barcode && product.barcode.toLowerCase().includes(searchTerm.toLowerCase()))
 
     if (filterType === 'low') {
-      return matchesSearch && item.quantity > 0 && item.quantity <= product.reorderLevel
+      return item.quantity > 0 && item.quantity <= product.reorderLevel
     } else if (filterType === 'out') {
-      return matchesSearch && item.quantity === 0
+      return item.quantity === 0
     }
-    return matchesSearch
+    return true
   })
+
+  const handleSearchChange = (search: string): void => {
+    setSearchTerm(search)
+    setPage(1) // Reset to first page on search
+  }
+
+  const handlePageChange = (newPage: number): void => {
+    setPage(newPage)
+  }
 
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault()
@@ -115,17 +131,31 @@ export default function Inventory(): React.JSX.Element {
     }
 
     try {
+      const currentUser = useAuthStore.getState().user
+      const options = {
+        userId: currentUser?.id,
+        username: currentUser?.username,
+        ...(editingItem && { version: editingItem.version })
+      }
+
       if (editingItem) {
-        await window.api.inventory.updateQuantity(formData.productId, formData.quantity)
+        await window.api.inventory.updateQuantity(formData.productId, formData.quantity, options)
         toast.success('Inventory updated successfully')
       } else {
-        await window.api.inventory.updateQuantity(formData.productId, formData.quantity)
+        await window.api.inventory.updateQuantity(formData.productId, formData.quantity, options)
         toast.success('Inventory added successfully')
       }
       handleCloseModal()
       loadData()
-    } catch {
-      toast.error('Failed to save inventory')
+    } catch (error) {
+      // Handle concurrent edit error
+      if (error instanceof Error && error.message.includes('CONCURRENT_EDIT')) {
+        toast.error('This inventory was modified by another user. Please refresh and try again.')
+        loadData() // Auto-refresh the data
+        handleCloseModal()
+      } else {
+        toast.error('Failed to save inventory')
+      }
     }
   }
 
@@ -149,10 +179,6 @@ export default function Inventory(): React.JSX.Element {
       batchNumber: '',
       expiryDate: ''
     })
-  }
-
-  const handleSearchChange = (value: string): void => {
-    setSearchTerm(value)
   }
 
   const handleFilterChange = (value: 'all' | 'low' | 'out'): void => {
@@ -216,6 +242,7 @@ export default function Inventory(): React.JSX.Element {
           onSearchChange={handleSearchChange}
           onFilterChange={handleFilterChange}
           onAdjustStock={() => setShowModal(true)}
+          onExportClick={() => setShowExportModal(true)}
         />
       </div>
 
@@ -228,6 +255,10 @@ export default function Inventory(): React.JSX.Element {
           currencySymbol={getCurrencySymbol()}
           onEdit={handleEdit}
           onViewDetails={handleViewDetails}
+          page={page}
+          totalRecords={totalRecords}
+          limit={limit}
+          onPageChange={handlePageChange}
         />
       </div>
 
@@ -253,6 +284,13 @@ export default function Inventory(): React.JSX.Element {
         }
         currencySymbol={getCurrencySymbol()}
         onClose={handleCloseDetailsModal}
+      />
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        defaultExportType="inventory"
       />
     </Container>
   )

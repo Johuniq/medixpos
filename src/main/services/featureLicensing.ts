@@ -50,61 +50,142 @@ export class FeatureLicensingService {
   public async refreshLicenseStatus(): Promise<void> {
     const licenseInfo = this.licenseService.getLicenseInfo()
 
+    console.log('[FeatureLicensing] Refreshing license status', {
+      isLicensed: licenseInfo.isLicensed,
+      status: licenseInfo.status,
+      hasLicenseKey: !!licenseInfo.licenseKey,
+      licenseKeyPrefix: licenseInfo.licenseKey?.substring(0, 10)
+    })
+
     if (!licenseInfo.isLicensed || licenseInfo.status !== 'active') {
+      console.log('[FeatureLicensing] License not active, setting tier to TRIAL')
       this.currentTier = 'TRIAL'
       return
     }
 
-    // Get license key and extract tier from prefix
+    // Extract tier directly from license key if available (most reliable)
+    if (licenseInfo.licenseKey) {
+      this.currentTier = this.extractTierFromLicenseKey(licenseInfo.licenseKey)
+      console.log('[FeatureLicensing] Extracted tier from license key:', this.currentTier)
+      return
+    }
+
+    // Fallback: Get license validation details for metadata check
     const validation = await this.licenseService.validateLicense()
-    if (!validation.valid || !validation.details) {
+    if (validation.valid && validation.details) {
+      this.currentTier = this.extractTierFromLicense(validation.details, licenseInfo.licenseKey)
+      console.log('[FeatureLicensing] Extracted tier from validation:', this.currentTier)
+    } else {
+      console.log('[FeatureLicensing] No validation details, defaulting to TRIAL')
       this.currentTier = 'TRIAL'
-      return
+    }
+  }
+
+  /**
+   * Extract tier from license key prefix
+   */
+  private extractTierFromLicenseKey(licenseKey: string): LicenseTier {
+    const upperKey = licenseKey.toUpperCase()
+    console.log('[FeatureLicensing] Checking license key prefix:', upperKey.substring(0, 10))
+
+    if (upperKey.startsWith('PRO_') || upperKey.startsWith('PRO-')) {
+      console.log('[FeatureLicensing] Detected PRO tier from license key prefix')
+      return 'PRO'
+    }
+    if (upperKey.startsWith('BASIC_') || upperKey.startsWith('BASIC-')) {
+      console.log('[FeatureLicensing] Detected BASIC tier from license key prefix')
+      return 'BASIC'
+    }
+    if (upperKey.startsWith('LITE_') || upperKey.startsWith('LITE-')) {
+      console.log('[FeatureLicensing] Detected LITE tier from license key prefix')
+      return 'LITE'
+    }
+    if (upperKey.startsWith('TRIAL_') || upperKey.startsWith('TRIAL-')) {
+      console.log('[FeatureLicensing] Detected TRIAL tier from license key prefix')
+      return 'TRIAL'
     }
 
-    // Extract tier from license metadata or key prefix
-    this.currentTier = this.extractTierFromLicense(validation.details)
+    console.warn('[FeatureLicensing] No tier prefix found in license key, defaulting to TRIAL')
+    return 'TRIAL'
   }
 
   /**
    * Extract license tier from Polar license validation response
    */
-  private extractTierFromLicense(licenseDetails: Record<string, unknown>): LicenseTier {
-    // Check license metadata for tier information
+  private extractTierFromLicense(
+    licenseDetails: Record<string, unknown>,
+    licenseKey?: string
+  ): LicenseTier {
+    console.log('[FeatureLicensing] Extracting tier from license', {
+      hasLicenseKey: !!licenseKey,
+      licenseKeyPrefix: licenseKey?.substring(0, 15),
+      hasDetails: !!licenseDetails,
+      detailsKeys: Object.keys(licenseDetails)
+    })
+
+    // First priority: Check license key prefix (most reliable)
+    if (licenseKey && typeof licenseKey === 'string') {
+      const upperKey = licenseKey.toUpperCase()
+      console.log('[FeatureLicensing] Checking license key prefix:', upperKey.substring(0, 10))
+
+      if (upperKey.startsWith('PRO_') || upperKey.startsWith('PRO-')) {
+        console.log('[FeatureLicensing] Detected PRO tier from license key prefix')
+        return 'PRO'
+      }
+      if (upperKey.startsWith('BASIC_') || upperKey.startsWith('BASIC-')) {
+        console.log('[FeatureLicensing] Detected BASIC tier from license key prefix')
+        return 'BASIC'
+      }
+      if (upperKey.startsWith('LITE_') || upperKey.startsWith('LITE-')) {
+        console.log('[FeatureLicensing] Detected LITE tier from license key prefix')
+        return 'LITE'
+      }
+      if (upperKey.startsWith('TRIAL_') || upperKey.startsWith('TRIAL-')) {
+        console.log('[FeatureLicensing] Detected TRIAL tier from license key prefix')
+        return 'TRIAL'
+      }
+    }
+
+    // Second priority: Check license metadata for tier information
     if (licenseDetails.meta && typeof licenseDetails.meta === 'object') {
       const meta = licenseDetails.meta as Record<string, unknown>
       if (meta.tier && typeof meta.tier === 'string') {
         const tier = meta.tier.toUpperCase() as LicenseTier
         if (['TRIAL', 'LITE', 'BASIC', 'PRO'].includes(tier)) {
+          console.log('[FeatureLicensing] Detected tier from metadata:', tier)
           return tier
         }
       }
     }
 
-    // Check license key prefix
-    if (licenseDetails.key && typeof licenseDetails.key === 'string') {
-      const key = licenseDetails.key as string
-      if (key.startsWith('PRO_')) return 'PRO'
-      if (key.startsWith('BASIC_')) return 'BASIC'
-      if (key.startsWith('LITE_')) return 'LITE'
-      if (key.startsWith('TRIAL_')) return 'TRIAL'
-    }
-
-    // Check product/subscription metadata
+    // Third priority: Check product/subscription metadata
     if (licenseDetails.subscription && typeof licenseDetails.subscription === 'object') {
       const subscription = licenseDetails.subscription as Record<string, unknown>
       if (subscription.product && typeof subscription.product === 'object') {
         const product = subscription.product as Record<string, unknown>
         if (product.name && typeof product.name === 'string') {
           const productName = product.name.toUpperCase()
-          if (productName.includes('PRO')) return 'PRO'
-          if (productName.includes('BASIC')) return 'BASIC'
-          if (productName.includes('LITE')) return 'LITE'
+          console.log('[FeatureLicensing] Checking product name:', productName)
+          if (productName.includes('PRO')) {
+            console.log('[FeatureLicensing] Detected PRO tier from product name')
+            return 'PRO'
+          }
+          if (productName.includes('BASIC')) {
+            console.log('[FeatureLicensing] Detected BASIC tier from product name')
+            return 'BASIC'
+          }
+          if (productName.includes('LITE')) {
+            console.log('[FeatureLicensing] Detected LITE tier from product name')
+            return 'LITE'
+          }
         }
       }
     }
 
     // Default to TRIAL if no tier found
+    console.warn(
+      '[FeatureLicensing] Could not determine license tier from license key or metadata, defaulting to TRIAL'
+    )
     return 'TRIAL'
   }
 

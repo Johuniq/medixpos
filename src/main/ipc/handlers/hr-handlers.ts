@@ -4,7 +4,7 @@
  * Unauthorized use, copying, or distribution is strictly prohibited.
  */
 
-import { desc, eq, gte, lte } from 'drizzle-orm'
+import { and, desc, eq, gte, like, lte, or, sql, SQL } from 'drizzle-orm'
 import { ipcMain } from 'electron'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../../database'
@@ -15,6 +15,93 @@ export function registerHRHandlers(): void {
   const db = getDatabase()
 
   // ==================== DAMAGED ITEMS ====================
+
+  // Get paginated damaged items
+  ipcMain.handle(
+    'db:damagedItems:getPaginated',
+    async (
+      _,
+      {
+        page = 1,
+        limit = 50,
+        search,
+        startDate,
+        endDate
+      }: {
+        page?: number
+        limit?: number
+        search?: string
+        startDate?: string
+        endDate?: string
+      } = {}
+    ) => {
+      try {
+        // Build conditions
+        const conditions: SQL<unknown>[] = []
+
+        if (startDate) {
+          conditions.push(gte(schema.damagedItems.createdAt, startDate))
+        }
+
+        if (endDate) {
+          conditions.push(lte(schema.damagedItems.createdAt, endDate))
+        }
+
+        if (search) {
+          conditions.push(
+            or(
+              like(schema.damagedItems.productName, `%${search}%`),
+              like(schema.damagedItems.batchNumber, `%${search}%`),
+              like(schema.damagedItems.reason, `%${search}%`)
+            )!
+          )
+        }
+
+        // Get total count
+        const countQuery = db.select({ count: sql<number>`count(*)` }).from(schema.damagedItems)
+
+        const totalResult =
+          conditions.length > 0 ? countQuery.where(and(...conditions)!).get() : countQuery.get()
+
+        const total = totalResult?.count || 0
+
+        // Get paginated data
+        const offset = (page - 1) * limit
+        const dataQuery = db
+          .select({
+            id: schema.damagedItems.id,
+            productId: schema.damagedItems.productId,
+            productName: schema.damagedItems.productName,
+            quantity: schema.damagedItems.quantity,
+            reason: schema.damagedItems.reason,
+            batchNumber: schema.damagedItems.batchNumber,
+            expiryDate: schema.damagedItems.expiryDate,
+            notes: schema.damagedItems.notes,
+            reportedBy: schema.users.fullName,
+            createdAt: schema.damagedItems.createdAt
+          })
+          .from(schema.damagedItems)
+          .leftJoin(schema.users, eq(schema.damagedItems.reportedBy, schema.users.id))
+          .orderBy(desc(schema.damagedItems.createdAt))
+          .limit(limit)
+          .offset(offset)
+
+        const data =
+          conditions.length > 0 ? dataQuery.where(and(...conditions)!).all() : dataQuery.all()
+
+        return {
+          data,
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit)
+        }
+      } catch (error) {
+        console.error('Error fetching paginated damaged items:', error)
+        throw error
+      }
+    }
+  )
 
   // Get all damaged items
   ipcMain.handle('db:damagedItems:getAll', async () => {

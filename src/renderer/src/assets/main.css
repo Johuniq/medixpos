@@ -180,3 +180,64 @@ code {
 .scrollbar-hide::-webkit-scrollbar {
   display: none; /* Chrome, Safari and Opera */
 }
+
+/* Print Styles for Reports */
+@media print {
+  /* Hide non-essential elements */
+  nav,
+  aside,
+  .MuiDrawer-root,
+  .MuiAppBar-root,
+  button,
+  .no-print {
+    display: none !important;
+  }
+
+  /* Reset page styles */
+  body {
+    background: white !important;
+    background-image: none !important;
+  }
+
+  /* Ensure content fills the page */
+  .MuiContainer-root {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Optimize page breaks */
+  .MuiPaper-root,
+  .MuiCard-root,
+  .MuiBox-root {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Remove shadows and borders */
+  .MuiPaper-root {
+    box-shadow: none !important;
+    border: 1px solid #ddd !important;
+  }
+
+  /* Optimize charts for printing */
+  canvas {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  /* Ensure tables are readable */
+  table {
+    page-break-inside: auto;
+  }
+
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+
+  /* Add page margins */
+  @page {
+    margin: 1cm;
+  }
+}

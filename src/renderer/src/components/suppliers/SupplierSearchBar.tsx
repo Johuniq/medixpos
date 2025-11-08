@@ -4,7 +4,7 @@
  * Unauthorized use, copying, or distribution is strictly prohibited.
  */
 
-import { Add, Receipt, Search } from '@mui/icons-material'
+import { Add, CloudDownload, Receipt, Search } from '@mui/icons-material'
 import { Box, Button, InputAdornment, Paper, TextField } from '@mui/material'
 import { Link } from 'react-router-dom'
 
@@ -12,12 +12,14 @@ interface SupplierSearchBarProps {
   searchTerm: string
   onSearchChange: (value: string) => void
   onAddClick: () => void
+  onExportClick: () => void
 }
 
 export default function SupplierSearchBar({
   searchTerm,
   onSearchChange,
-  onAddClick
+  onAddClick,
+  onExportClick
 }: SupplierSearchBarProps): React.JSX.Element {
   return (
     <Paper sx={{ p: 2, mb: 3 }}>
@@ -46,6 +48,9 @@ export default function SupplierSearchBar({
         />
 
         <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+          <Button variant="outlined" startIcon={<CloudDownload />} onClick={onExportClick}>
+            Export Data
+          </Button>
           <Button variant="contained" startIcon={<Add />} onClick={onAddClick}>
             Add Supplier
           </Button>

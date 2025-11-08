@@ -26,12 +26,30 @@ import { useState } from 'react'
 import { Customer } from '../../types/customer'
 import ConfirmationDialog from '../common/ConfirmationDialog'
 
+const StyledTableCell = styled(TableCell)(({ theme }) => ({
+  [`&.${tableCellClasses.head}`]: {
+    backgroundColor: theme.palette.grey[300],
+    color: theme.palette.text.secondary,
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    fontSize: '0.75rem',
+    letterSpacing: '0.5px'
+  },
+  [`&.${tableCellClasses.body}`]: {
+    fontSize: 14
+  }
+}))
+
 interface CustomersTableProps {
   customers: Customer[]
   currencySymbol: string
   onEdit: (customer: Customer) => void
   onView: (customer: Customer) => void
   onDelete: (id: string) => void
+  page?: number
+  totalRecords?: number
+  limit?: number
+  onPageChange?: (page: number) => void
 }
 
 export default function CustomersTable({
@@ -39,34 +57,34 @@ export default function CustomersTable({
   currencySymbol,
   onEdit,
   onView,
-  onDelete
+  onDelete,
+  page: serverPage,
+  totalRecords,
+  limit: serverLimit,
+  onPageChange
 }: CustomersTableProps): React.JSX.Element {
-  const [page, setPage] = useState(0)
-  const [rowsPerPage, setRowsPerPage] = useState(25)
+  const [localPage, setLocalPage] = useState(0)
+  const [localRowsPerPage, setLocalRowsPerPage] = useState(25)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null)
 
-  const StyledTableCell = styled(TableCell)(({ theme }) => ({
-    [`&.${tableCellClasses.head}`]: {
-      backgroundColor: theme.palette.grey[300],
-      color: theme.palette.text.secondary,
-      fontWeight: 600,
-      textTransform: 'uppercase',
-      fontSize: '0.75rem',
-      letterSpacing: '0.5px'
-    },
-    [`&.${tableCellClasses.body}`]: {
-      fontSize: 14
-    }
-  }))
+  // Use server pagination if available, otherwise local
+  const usingServerPagination = serverPage !== undefined && totalRecords !== undefined
+  const currentPage = usingServerPagination ? serverPage - 1 : localPage
+  const rowsPerPage = usingServerPagination ? serverLimit || 50 : localRowsPerPage
+  const total = usingServerPagination ? totalRecords : customers.length
 
   const handleChangePage = (_: unknown, newPage: number): void => {
-    setPage(newPage)
+    if (usingServerPagination && onPageChange) {
+      onPageChange(newPage + 1) // Convert to 1-based for server
+    } else {
+      setLocalPage(newPage)
+    }
   }
 
   const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    setRowsPerPage(parseInt(event.target.value, 10))
-    setPage(0)
+    setLocalRowsPerPage(parseInt(event.target.value, 10))
+    setLocalPage(0)
   }
 
   const handleDeleteClick = (customer: Customer): void => {
@@ -86,7 +104,10 @@ export default function CustomersTable({
     setCustomerToDelete(null)
   }
 
-  const paginatedCustomers = customers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+  // For server pagination, customers are already paginated
+  const paginatedCustomers = usingServerPagination
+    ? customers
+    : customers.slice(localPage * localRowsPerPage, localPage * localRowsPerPage + localRowsPerPage)
 
   if (paginatedCustomers.length === 0) {
     return (
@@ -267,12 +288,12 @@ export default function CustomersTable({
       <Paper>
         <TablePagination
           component="div"
-          count={customers.length}
-          page={page}
+          count={total}
+          page={currentPage}
           onPageChange={handleChangePage}
           rowsPerPage={rowsPerPage}
           onRowsPerPageChange={handleChangeRowsPerPage}
-          rowsPerPageOptions={[10, 25, 50, 100]}
+          rowsPerPageOptions={usingServerPagination ? [] : [10, 25, 50, 100]}
         />
       </Paper>
 

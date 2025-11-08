@@ -24,6 +24,7 @@ import { addDamagedItemsTable } from './migrations/add-damaged-items-table'
 import { addMissingOpeningBalances } from './migrations/add-missing-opening-balances'
 import { addMustChangePassword } from './migrations/add-must-change-password'
 import { addNotificationsTable } from './migrations/add-notifications-table'
+import { addOptimisticLocking } from './migrations/add-optimistic-locking'
 import { addPointsRedeemedToSales } from './migrations/add-points-redeemed-to-sales'
 import { migrateProductShelf } from './migrations/add-product-shelf'
 import { addProductStrength } from './migrations/add-product-strength'
@@ -89,6 +90,7 @@ function runMigrations(): void {
       addProductStrength(sqlite)
       addComprehensiveSettings(sqlite)
       addNotificationsTable(sqlite)
+      addOptimisticLocking(sqlite)
     }
   } catch (error) {
     console.error('Migration error:', error)

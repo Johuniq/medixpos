@@ -28,6 +28,20 @@ import medicinePlaceholder from '../../assets/medicine.png'
 import { Category, InventoryWithProduct } from '../../types/inventory'
 import { formatExpiryDate, getExpiryStatus } from '../../utils/expiryHelpers'
 
+const StyledTableCell = styled(TableCell)(({ theme }) => ({
+  [`&.${tableCellClasses.head}`]: {
+    backgroundColor: theme.palette.grey[300],
+    color: theme.palette.text.secondary,
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    fontSize: '0.75rem',
+    letterSpacing: '0.5px'
+  },
+  [`&.${tableCellClasses.body}`]: {
+    fontSize: 14
+  }
+}))
+
 interface InventoryTableProps {
   inventory: InventoryWithProduct[]
   categories: Category[]
@@ -35,6 +49,10 @@ interface InventoryTableProps {
   currencySymbol: string
   onEdit: (item: InventoryWithProduct) => void
   onViewDetails: (item: InventoryWithProduct) => void
+  page?: number
+  totalRecords?: number
+  limit?: number
+  onPageChange?: (page: number) => void
 }
 
 export default function InventoryTable({
@@ -43,32 +61,32 @@ export default function InventoryTable({
   loading,
   currencySymbol,
   onEdit,
-  onViewDetails
+  onViewDetails,
+  page: serverPage,
+  totalRecords,
+  limit: serverLimit,
+  onPageChange
 }: InventoryTableProps): React.JSX.Element {
-  const [page, setPage] = useState(0)
-  const [rowsPerPage, setRowsPerPage] = useState(10)
+  const [localPage, setLocalPage] = useState(0)
+  const [localRowsPerPage, setLocalRowsPerPage] = useState(10)
 
-  const StyledTableCell = styled(TableCell)(({ theme }) => ({
-    [`&.${tableCellClasses.head}`]: {
-      backgroundColor: theme.palette.grey[300],
-      color: theme.palette.text.secondary,
-      fontWeight: 600,
-      textTransform: 'uppercase',
-      fontSize: '0.75rem',
-      letterSpacing: '0.5px'
-    },
-    [`&.${tableCellClasses.body}`]: {
-      fontSize: 14
-    }
-  }))
+  // Use server pagination if available, otherwise local
+  const usingServerPagination = serverPage !== undefined && totalRecords !== undefined
+  const currentPage = usingServerPagination ? serverPage - 1 : localPage
+  const rowsPerPage = usingServerPagination ? serverLimit || 50 : localRowsPerPage
+  const total = usingServerPagination ? totalRecords : inventory.length
 
   const handleChangePage = (_: unknown, newPage: number): void => {
-    setPage(newPage)
+    if (usingServerPagination && onPageChange) {
+      onPageChange(newPage + 1)
+    } else {
+      setLocalPage(newPage)
+    }
   }
 
   const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    setRowsPerPage(parseInt(event.target.value, 10))
-    setPage(0)
+    setLocalRowsPerPage(parseInt(event.target.value, 10))
+    setLocalPage(0)
   }
 
   if (loading) {
@@ -109,7 +127,10 @@ export default function InventoryTable({
     )
   }
 
-  const paginatedInventory = inventory.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+  // For server pagination, inventory is already paginated
+  const paginatedInventory = usingServerPagination
+    ? inventory
+    : inventory.slice(localPage * localRowsPerPage, localPage * localRowsPerPage + localRowsPerPage)
 
   return (
     <Box>
@@ -267,11 +288,11 @@ export default function InventoryTable({
       </TableContainer>
       <Paper>
         <TablePagination
-          rowsPerPageOptions={[10, 25, 50]}
+          rowsPerPageOptions={usingServerPagination ? [] : [10, 25, 50]}
           component="div"
-          count={inventory.length}
+          count={total}
           rowsPerPage={rowsPerPage}
-          page={page}
+          page={currentPage}
           onPageChange={handleChangePage}
           onRowsPerPageChange={handleChangeRowsPerPage}
         />

@@ -13,6 +13,7 @@ import { useAuthStore } from './store/authStore'
 import { useSettingsStore } from './store/settingsStore'
 
 // Components
+import AutoUpdateNotifier from './components/AutoUpdateNotifier'
 import Layout from './components/Layout'
 import LicenseGuard from './components/LicenseGuard'
 import { ToastContainer } from './components/notifications'
@@ -70,6 +71,7 @@ function App(): React.JSX.Element {
         <ToastContainer />
         <SessionChecker />
         <TourManager />
+        <AutoUpdateNotifier />
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route

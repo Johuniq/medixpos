@@ -26,6 +26,20 @@ import {
 import { useState } from 'react'
 import { Supplier } from '../../types/supplier'
 
+const StyledTableCell = styled(TableCell)(({ theme }) => ({
+  [`&.${tableCellClasses.head}`]: {
+    backgroundColor: theme.palette.grey[300],
+    color: theme.palette.text.secondary,
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    fontSize: '0.75rem',
+    letterSpacing: '0.5px'
+  },
+  [`&.${tableCellClasses.body}`]: {
+    fontSize: 14
+  }
+}))
+
 interface SuppliersTableProps {
   suppliers: Supplier[]
   loading: boolean
@@ -36,6 +50,10 @@ interface SuppliersTableProps {
   onEdit: (supplier: Supplier) => void
   onDelete: (id: string) => void
   onRecordPayment: (supplier: Supplier) => void
+  page?: number
+  totalRecords?: number
+  limit?: number
+  onServerPageChange?: (page: number) => void
 }
 
 export default function SuppliersTable({
@@ -45,39 +63,41 @@ export default function SuppliersTable({
   onItemsPerPageChange,
   onEdit,
   onDelete,
-  onRecordPayment
+  onRecordPayment,
+  page: serverPage,
+  totalRecords,
+  limit: serverLimit,
+  onServerPageChange
 }: SuppliersTableProps): React.JSX.Element {
-  const [page, setPage] = useState(0)
-  const [rowsPerPage, setRowsPerPage] = useState(25)
+  const [localPage, setLocalPage] = useState(0)
+  const [localRowsPerPage, setLocalRowsPerPage] = useState(25)
 
-  const StyledTableCell = styled(TableCell)(({ theme }) => ({
-    [`&.${tableCellClasses.head}`]: {
-      backgroundColor: theme.palette.grey[300],
-      color: theme.palette.text.secondary,
-      fontWeight: 600,
-      textTransform: 'uppercase',
-      fontSize: '0.75rem',
-      letterSpacing: '0.5px'
-    },
-    [`&.${tableCellClasses.body}`]: {
-      fontSize: 14
-    }
-  }))
+  // Use server pagination if available, otherwise local
+  const usingServerPagination = serverPage !== undefined && totalRecords !== undefined
+  const currentPage = usingServerPagination ? serverPage - 1 : localPage
+  const rowsPerPage = usingServerPagination ? serverLimit || 50 : localRowsPerPage
+  const total = usingServerPagination ? totalRecords : suppliers.length
 
   const handleChangePage = (_: unknown, newPage: number): void => {
-    setPage(newPage)
-    onPageChange(newPage + 1)
+    if (usingServerPagination && onServerPageChange) {
+      onServerPageChange(newPage + 1)
+    } else {
+      setLocalPage(newPage)
+      onPageChange(newPage + 1)
+    }
   }
 
   const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>): void => {
     const newRowsPerPage = parseInt(event.target.value, 10)
-    setRowsPerPage(newRowsPerPage)
+    setLocalRowsPerPage(newRowsPerPage)
     onItemsPerPageChange(newRowsPerPage)
-    setPage(0)
+    setLocalPage(0)
     onPageChange(1)
   }
 
-  const paginatedSuppliers = suppliers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+  const paginatedSuppliers = usingServerPagination
+    ? suppliers
+    : suppliers.slice(localPage * localRowsPerPage, localPage * localRowsPerPage + localRowsPerPage)
 
   if (loading) {
     return (
@@ -267,12 +287,12 @@ export default function SuppliersTable({
       <Paper>
         <TablePagination
           component="div"
-          count={suppliers.length}
-          page={page}
+          count={total}
+          page={currentPage}
           onPageChange={handleChangePage}
           rowsPerPage={rowsPerPage}
           onRowsPerPageChange={handleChangeRowsPerPage}
-          rowsPerPageOptions={[10, 25, 50, 100]}
+          rowsPerPageOptions={usingServerPagination ? [] : [10, 25, 50, 100]}
         />
       </Paper>
     </Box>

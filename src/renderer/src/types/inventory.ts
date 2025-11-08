@@ -10,6 +10,7 @@ export interface InventoryItem {
   quantity: number
   batchNumber?: string
   expiryDate?: string
+  version: number // Optimistic locking version
   createdAt: string
   updatedAt: string
 }

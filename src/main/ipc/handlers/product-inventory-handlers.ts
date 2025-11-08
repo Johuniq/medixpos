@@ -11,12 +11,71 @@ import { getDatabase } from '../../database'
 import * as schema from '../../database/schema'
 import { createAuditLog } from '../utils/audit-logger'
 
+interface PaginationParams {
+  page?: number
+  limit?: number
+  search?: string
+}
+
+interface PaginatedResponse<T> {
+  data: T[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
 export function registerProductInventoryHandlers(): void {
   const db = getDatabase()
 
   // ==================== PRODUCTS ====================
 
-  // Get all active products (with optional search)
+  // Get paginated products
+  ipcMain.handle(
+    'db:products:getPaginated',
+    async (_, params: PaginationParams): Promise<PaginatedResponse<unknown>> => {
+      const page = params.page || 1
+      const limit = params.limit || 50
+      const offset = (page - 1) * limit
+      const search = params.search?.trim()
+
+      // Build where clause
+      const whereClause = search
+        ? and(
+            eq(schema.products.isActive, true),
+            sql`(${schema.products.name} LIKE ${`%${search}%`} OR ${schema.products.barcode} LIKE ${`%${search}%`} OR ${schema.products.sku} LIKE ${`%${search}%`})`
+          )
+        : eq(schema.products.isActive, true)
+
+      // Get total count
+      const countResult = db
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.products)
+        .where(whereClause)
+        .get()
+
+      const total = countResult?.count || 0
+
+      // Get paginated data
+      const data = db
+        .select()
+        .from(schema.products)
+        .where(whereClause)
+        .limit(limit)
+        .offset(offset)
+        .all()
+
+      return {
+        data,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    }
+  )
+
+  // Get all active products (with optional search) - kept for backward compatibility
   ipcMain.handle('db:products:getAll', async (_, search?: string) => {
     if (search) {
       return db
@@ -84,9 +143,21 @@ export function registerProductInventoryHandlers(): void {
   ipcMain.handle('db:products:update', async (_, { id, data }) => {
     const oldProduct = db.select().from(schema.products).where(eq(schema.products.id, id)).get()
 
+    if (!oldProduct) {
+      throw new Error('Product not found')
+    }
+
+    // Optimistic locking: Check version
+    const currentVersion = data.version || oldProduct.version
+    if (currentVersion !== oldProduct.version) {
+      throw new Error(
+        'CONCURRENT_EDIT: This product was modified by another user. Please refresh and try again.'
+      )
+    }
+
     const result = db
       .update(schema.products)
-      .set({ ...data, updatedAt: new Date().toISOString() })
+      .set({ ...data, version: oldProduct.version + 1, updatedAt: new Date().toISOString() })
       .where(eq(schema.products.id, id))
       .returning()
       .get()
@@ -94,7 +165,7 @@ export function registerProductInventoryHandlers(): void {
     const changes: Record<string, { old: unknown; new: unknown }> = {}
     if (oldProduct) {
       Object.keys(data).forEach((key) => {
-        if (oldProduct[key] !== data[key]) {
+        if (key !== 'version' && oldProduct[key] !== data[key]) {
           changes[key] = { old: oldProduct[key], new: data[key] }
         }
       })
@@ -135,7 +206,63 @@ export function registerProductInventoryHandlers(): void {
 
   // ==================== INVENTORY ====================
 
-  // Get all inventory items
+  // Get paginated inventory items
+  ipcMain.handle(
+    'db:inventory:getPaginated',
+    async (_, params: PaginationParams): Promise<PaginatedResponse<unknown>> => {
+      const page = params.page || 1
+      const limit = params.limit || 50
+      const offset = (page - 1) * limit
+      const search = params.search?.trim()
+
+      // Build where clause
+      const whereClause = search
+        ? sql`(${schema.products.name} LIKE ${`%${search}%`} OR ${schema.products.sku} LIKE ${`%${search}%`} OR ${schema.products.barcode} LIKE ${`%${search}%`})`
+        : undefined
+
+      // Get total count
+      const countQuery = db
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.inventory)
+        .innerJoin(schema.products, eq(schema.inventory.productId, schema.products.id))
+
+      const countResult = whereClause ? countQuery.where(whereClause).get() : countQuery.get()
+
+      const total = countResult?.count || 0
+
+      // Get paginated data
+      const dataQuery = db
+        .select({
+          id: schema.inventory.id,
+          productId: schema.inventory.productId,
+          quantity: schema.inventory.quantity,
+          batchNumber: schema.inventory.batchNumber,
+          expiryDate: schema.inventory.expiryDate,
+          version: schema.inventory.version,
+          productName: schema.products.name,
+          productSku: schema.products.sku,
+          productBarcode: schema.products.barcode,
+          sellingPrice: schema.products.sellingPrice,
+          reorderLevel: schema.products.reorderLevel
+        })
+        .from(schema.inventory)
+        .innerJoin(schema.products, eq(schema.inventory.productId, schema.products.id))
+        .limit(limit)
+        .offset(offset)
+
+      const data = whereClause ? dataQuery.where(whereClause).all() : dataQuery.all()
+
+      return {
+        data,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    }
+  )
+
+  // Get all inventory items - kept for backward compatibility
   ipcMain.handle('db:inventory:getAll', async () => {
     return db
       .select({
@@ -175,7 +302,7 @@ export function registerProductInventoryHandlers(): void {
   // Update inventory quantity
   ipcMain.handle(
     'db:inventory:updateQuantity',
-    async (_, { productId, quantity, userId, username }) => {
+    async (_, { productId, quantity, userId, username, version }) => {
       try {
         // Validate that product exists
         const product = db
@@ -199,11 +326,23 @@ export function registerProductInventoryHandlers(): void {
         let newQuantity = quantity
 
         if (existing) {
+          // Optimistic locking: Check version
+          const currentVersion = version || existing.version
+          if (currentVersion !== existing.version) {
+            throw new Error(
+              'CONCURRENT_EDIT: This inventory was modified by another user. Please refresh and try again.'
+            )
+          }
+
           oldQuantity = existing.quantity
           newQuantity = quantity // Set to the new quantity directly, don't add
           result = db
             .update(schema.inventory)
-            .set({ quantity: newQuantity, updatedAt: new Date().toISOString() })
+            .set({
+              quantity: newQuantity,
+              version: existing.version + 1,
+              updatedAt: new Date().toISOString()
+            })
             .where(eq(schema.inventory.id, existing.id))
             .returning()
             .get()

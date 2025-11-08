@@ -7,12 +7,21 @@
 import { Box, CircularProgress, Container, Typography } from '@mui/material'
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
+import ExportModal from '../components/export/ExportModal'
 import FeatureGuard from '../components/FeatureGuard'
 import CustomerReport from '../components/reports/CustomerReport'
+import CustomerRFMReport from '../components/reports/CustomerRFMReport'
+import EmployeePerformanceReport from '../components/reports/EmployeePerformanceReport'
 import InventoryReport from '../components/reports/InventoryReport'
 import OverviewReport from '../components/reports/OverviewReport'
+import PaymentMethodReport from '../components/reports/PaymentMethodReport'
+import PeakHoursReport from '../components/reports/PeakHoursReport'
+import ProfitMarginReport from '../components/reports/ProfitMarginReport'
 import ReportFilters from '../components/reports/ReportFilters'
 import SalesReport from '../components/reports/SalesReport'
+import SlowMovingStockReport from '../components/reports/SlowMovingStockReport'
+import VendorPerformanceReport from '../components/reports/VendorPerformanceReport'
+import YearOverYearReport from '../components/reports/YearOverYearReport'
 import { useSettingsStore } from '../store/settingsStore'
 import { ReportData } from '../types/report'
 
@@ -22,6 +31,11 @@ export default function Reports(): React.JSX.Element {
   const [dateRange, setDateRange] = useState('30')
   const [reportType, setReportType] = useState('overview')
   const [loading, setLoading] = useState(true)
+  const [showExportModal, setShowExportModal] = useState(false)
+
+  // Advanced reports data
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [advancedReportData, setAdvancedReportData] = useState<any>(null)
 
   // Get currency symbol
   const getCurrencySymbol = (): string => {
@@ -196,6 +210,33 @@ export default function Reports(): React.JSX.Element {
       }
 
       setReportData(reportDataObj)
+
+      // Load advanced reports data based on report type
+      if (reportType === 'profitMargin') {
+        const data = await window.api.reports.profitMargin(startDateStr, endDateStr)
+        setAdvancedReportData(data)
+      } else if (reportType === 'vendorPerformance') {
+        const data = await window.api.reports.vendorPerformance(startDateStr, endDateStr)
+        setAdvancedReportData(data)
+      } else if (reportType === 'employeePerformance') {
+        const data = await window.api.reports.employeePerformance(startDateStr, endDateStr)
+        setAdvancedReportData(data)
+      } else if (reportType === 'slowMovingStock') {
+        const data = await window.api.reports.slowMovingStock(startDateStr, endDateStr)
+        setAdvancedReportData(data)
+      } else if (reportType === 'paymentMethod') {
+        const data = await window.api.reports.paymentMethodAnalysis(startDateStr, endDateStr)
+        setAdvancedReportData(data)
+      } else if (reportType === 'peakHours') {
+        const data = await window.api.reports.peakHoursAnalysis(startDateStr, endDateStr)
+        setAdvancedReportData(data)
+      } else if (reportType === 'customerRFM') {
+        const data = await window.api.reports.customerRFMAnalysis()
+        setAdvancedReportData(data)
+      } else if (reportType === 'yearOverYear') {
+        const data = await window.api.reports.yearOverYear()
+        setAdvancedReportData(data)
+      }
     } catch (error) {
       console.error('Failed to load report data:', error)
       toast.error('Failed to load report data')
@@ -205,11 +246,168 @@ export default function Reports(): React.JSX.Element {
   }
 
   const exportReport = (): void => {
-    toast.success('Report export functionality will be implemented')
+    setShowExportModal(true)
   }
 
   const printReport = (): void => {
-    window.print()
+    // Create a print-friendly version of the current report
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      toast.error('Please allow popups to print reports')
+      return
+    }
+
+    const reportTitle = getReportTitle(reportType)
+    const dateRangeText = getDateRangeText(dateRange)
+    const currentDate = new Date().toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    })
+
+    // Get the report content
+    const reportContent = document.querySelector('[data-tour^="reports-"]')?.innerHTML || ''
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${reportTitle} - ${dateRangeText}</title>
+          <style>
+            * {
+              margin: 0;
+              padding: 0;
+              box-sizing: border-box;
+            }
+            body {
+              font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+              padding: 20px;
+              color: #333;
+            }
+            .print-header {
+              text-align: center;
+              margin-bottom: 30px;
+              padding-bottom: 20px;
+              border-bottom: 2px solid #1976d2;
+            }
+            .print-header h1 {
+              font-size: 28px;
+              color: #1976d2;
+              margin-bottom: 10px;
+            }
+            .print-header .subtitle {
+              font-size: 16px;
+              color: #666;
+              margin-bottom: 5px;
+            }
+            .print-header .date {
+              font-size: 14px;
+              color: #999;
+            }
+            .report-content {
+              margin: 20px 0;
+            }
+            .MuiPaper-root {
+              border: 1px solid #ddd;
+              padding: 20px;
+              margin-bottom: 20px;
+              border-radius: 8px;
+              box-shadow: none !important;
+              page-break-inside: avoid;
+            }
+            .MuiCard-root {
+              border: 1px solid #ddd;
+              padding: 15px;
+              margin: 10px 0;
+              border-radius: 8px;
+              box-shadow: none !important;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin: 15px 0;
+            }
+            th, td {
+              padding: 12px;
+              text-align: left;
+              border-bottom: 1px solid #ddd;
+            }
+            th {
+              background-color: #f5f5f5;
+              font-weight: 600;
+              color: #1976d2;
+            }
+            button, .no-print {
+              display: none !important;
+            }
+            canvas {
+              max-width: 100%;
+              height: auto !important;
+            }
+            @media print {
+              body {
+                padding: 10px;
+              }
+              .MuiPaper-root, .MuiCard-root {
+                page-break-inside: avoid;
+                break-inside: avoid;
+              }
+              @page {
+                margin: 1.5cm;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="print-header">
+            <h1>${reportTitle}</h1>
+            <div class="subtitle">Period: ${dateRangeText}</div>
+            <div class="date">Generated on: ${currentDate}</div>
+          </div>
+          <div class="report-content">
+            ${reportContent}
+          </div>
+          <script>
+            window.onload = function() {
+              setTimeout(function() {
+                window.print();
+                window.onafterprint = function() {
+                  window.close();
+                };
+              }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `)
+    printWindow.document.close()
+  }
+
+  const getReportTitle = (type: string): string => {
+    const titles: Record<string, string> = {
+      overview: 'Overview Report',
+      sales: 'Sales Report',
+      inventory: 'Inventory Report',
+      customer: 'Customer Report',
+      profitMargin: 'Profit Margin Analysis',
+      vendorPerformance: 'Vendor Performance Report',
+      employeePerformance: 'Employee Performance Report',
+      slowMovingStock: 'Slow Moving Stock Report',
+      paymentMethod: 'Payment Method Analysis',
+      peakHours: 'Peak Hours Analysis',
+      customerRFM: 'Customer RFM Analysis',
+      yearOverYear: 'Year-over-Year Comparison'
+    }
+    return titles[type] || 'Report'
+  }
+
+  const getDateRangeText = (range: string): string => {
+    const days = parseInt(range)
+    if (days === 7) return 'Last 7 Days'
+    if (days === 30) return 'Last 30 Days'
+    if (days === 90) return 'Last 90 Days'
+    if (days === 365) return 'Last Year'
+    return `Last ${days} Days`
   }
 
   if (loading) {
@@ -301,25 +499,84 @@ export default function Reports(): React.JSX.Element {
         </div>
       )}
       {reportType === 'inventory' && (
-        <FeatureGuard
-          featureId="advanced_inventory"
-          fallbackMessage="Inventory analytics require the BASIC plan or higher."
-        >
+        <FeatureGuard featureId="advanced_inventory">
           <div data-tour="reports-inventory">
             <InventoryReport reportData={reportData} />
           </div>
         </FeatureGuard>
       )}
       {reportType === 'customer' && (
-        <FeatureGuard
-          featureId="comprehensive_reports"
-          fallbackMessage="Customer analytics require the PRO plan or higher."
-        >
+        <FeatureGuard featureId="comprehensive_reports">
           <div data-tour="reports-customer">
             <CustomerReport reportData={reportData} currencySymbol={currencySymbol} />
           </div>
         </FeatureGuard>
       )}
+
+      {/* Advanced Reports */}
+      {reportType === 'profitMargin' && advancedReportData && (
+        <FeatureGuard featureId="comprehensive_reports">
+          <div data-tour="reports-profit-margin">
+            <ProfitMarginReport data={advancedReportData} />
+          </div>
+        </FeatureGuard>
+      )}
+      {reportType === 'vendorPerformance' && advancedReportData && (
+        <FeatureGuard featureId="comprehensive_reports">
+          <div data-tour="reports-vendor-performance">
+            <VendorPerformanceReport data={advancedReportData} />
+          </div>
+        </FeatureGuard>
+      )}
+      {reportType === 'employeePerformance' && advancedReportData && (
+        <FeatureGuard featureId="comprehensive_reports">
+          <div data-tour="reports-employee-performance">
+            <EmployeePerformanceReport data={advancedReportData} />
+          </div>
+        </FeatureGuard>
+      )}
+      {reportType === 'slowMovingStock' && advancedReportData && (
+        <FeatureGuard featureId="comprehensive_reports">
+          <div data-tour="reports-slow-moving-stock">
+            <SlowMovingStockReport data={advancedReportData} />
+          </div>
+        </FeatureGuard>
+      )}
+      {reportType === 'paymentMethod' && advancedReportData && (
+        <FeatureGuard featureId="comprehensive_reports">
+          <div data-tour="reports-payment-method">
+            <PaymentMethodReport data={advancedReportData} />
+          </div>
+        </FeatureGuard>
+      )}
+      {reportType === 'peakHours' && advancedReportData && (
+        <FeatureGuard featureId="comprehensive_reports">
+          <div data-tour="reports-peak-hours">
+            <PeakHoursReport data={advancedReportData} />
+          </div>
+        </FeatureGuard>
+      )}
+      {reportType === 'customerRFM' && advancedReportData && (
+        <FeatureGuard featureId="comprehensive_reports">
+          <div data-tour="reports-customer-rfm">
+            <CustomerRFMReport data={advancedReportData} />
+          </div>
+        </FeatureGuard>
+      )}
+      {reportType === 'yearOverYear' && advancedReportData && (
+        <FeatureGuard featureId="comprehensive_reports">
+          <div data-tour="reports-year-over-year">
+            <YearOverYearReport data={advancedReportData} />
+          </div>
+        </FeatureGuard>
+      )}
+
+      {/* Export Modal - Show sales by default for reports */}
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        defaultExportType="sales"
+      />
     </Container>
   )
 }

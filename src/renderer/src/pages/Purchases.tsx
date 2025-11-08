@@ -7,6 +7,7 @@
 import { Box, Container, Typography } from '@mui/material'
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
+import ExportModal from '../components/export/ExportModal'
 import AddPurchaseModal from '../components/purchases/AddPurchaseModal'
 import PurchaseDetailsModal from '../components/purchases/PurchaseDetailsModal'
 import PurchaseFilters from '../components/purchases/PurchaseFilters'
@@ -22,11 +23,15 @@ export default function Purchases(): React.JSX.Element {
   const [purchases, setPurchases] = useState<Purchase[]>([])
   const [filteredPurchases, setFilteredPurchases] = useState<Purchase[]>([])
   const [searchTerm, setSearchTerm] = useState('')
+  const [page, setPage] = useState(1)
+  const [totalRecords, setTotalRecords] = useState(0)
+  const [limit] = useState(50)
   const [statusFilter, setStatusFilter] = useState('all')
   const [paymentFilter, setPaymentFilter] = useState('all')
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showReturnModal, setShowReturnModal] = useState(false)
+  const [showExportModal, setShowExportModal] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [purchaseToDelete, setPurchaseToDelete] = useState<Purchase | null>(null)
   const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null)
@@ -59,21 +64,36 @@ export default function Purchases(): React.JSX.Element {
     loadSuppliers()
     loadProducts()
     loadAccounts()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, searchTerm])
 
   useEffect(() => {
     filterPurchases()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [purchases, searchTerm, statusFilter, paymentFilter])
+  }, [purchases, statusFilter, paymentFilter])
 
   const loadPurchases = async (): Promise<void> => {
     try {
-      const allPurchases = await window.api.purchases.getAll()
-      const typedPurchases = allPurchases as unknown as Purchase[]
+      const response = await window.api.purchases.getPaginated({
+        page,
+        limit,
+        search: searchTerm
+      })
+      const typedPurchases = response.data as unknown as Purchase[]
       setPurchases(typedPurchases)
+      setTotalRecords(response.total)
     } catch {
       toast.error('Failed to load purchases')
     }
+  }
+
+  const handleSearchChange = (search: string): void => {
+    setSearchTerm(search)
+    setPage(1)
+  }
+
+  const handlePageChange = (newPage: number): void => {
+    setPage(newPage)
   }
 
   const loadSuppliers = async (): Promise<void> => {
@@ -215,11 +235,12 @@ export default function Purchases(): React.JSX.Element {
           searchTerm={searchTerm}
           statusFilter={statusFilter}
           paymentFilter={paymentFilter}
-          onSearchChange={setSearchTerm}
+          onSearchChange={handleSearchChange}
           onStatusFilterChange={setStatusFilter}
           onPaymentFilterChange={setPaymentFilter}
           onAddPurchase={() => setShowAddModal(true)}
           onPurchaseReturn={() => setShowReturnModal(true)}
+          onExportClick={() => setShowExportModal(true)}
         />
       </div>
 
@@ -230,6 +251,10 @@ export default function Purchases(): React.JSX.Element {
           currencySymbol={getCurrencySymbol()}
           onViewDetails={handleViewDetails}
           onDelete={handleDelete}
+          page={page}
+          totalRecords={totalRecords}
+          limit={limit}
+          onServerPageChange={handlePageChange}
         />
       </div>
 
@@ -272,6 +297,13 @@ export default function Purchases(): React.JSX.Element {
         cancelText="Cancel"
         onConfirm={handleConfirmDelete}
         onCancel={handleCancelDelete}
+      />
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        defaultExportType="purchases"
       />
     </Container>
   )

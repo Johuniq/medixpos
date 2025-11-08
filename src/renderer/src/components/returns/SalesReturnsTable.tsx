@@ -35,6 +35,10 @@ interface SalesReturnsTableProps {
   onPageChange: (page: number) => void
   onItemsPerPageChange: (items: number) => void
   onViewDetails: (returnItem: SalesReturn) => Promise<void>
+  page?: number
+  totalRecords?: number
+  limit?: number
+  onServerPageChange?: (page: number) => void
 }
 
 export default function SalesReturnsTable({

@@ -4,7 +4,7 @@
  * Unauthorized use, copying, or distribution is strictly prohibited.
  */
 
-import { AssignmentReturn, Search } from '@mui/icons-material'
+import { AssignmentReturn, CloudDownload, Search } from '@mui/icons-material'
 import {
   Box,
   Button,
@@ -25,6 +25,7 @@ interface SalesFiltersProps {
   onStatusFilterChange: (value: string) => void
   onPaymentFilterChange: (value: string) => void
   onReturnClick: () => void
+  onExportClick: () => void
 }
 
 export default function SalesFilters({
@@ -34,7 +35,8 @@ export default function SalesFilters({
   onSearchChange,
   onStatusFilterChange,
   onPaymentFilterChange,
-  onReturnClick
+  onReturnClick,
+  onExportClick
 }: SalesFiltersProps): React.JSX.Element {
   return (
     <Paper sx={{ p: 2, mb: 3 }}>
@@ -93,14 +95,24 @@ export default function SalesFilters({
           </FormControl>
         </Box>
 
-        <Button
-          variant="contained"
-          startIcon={<AssignmentReturn />}
-          onClick={onReturnClick}
-          sx={{ bgcolor: 'secondary.main', '&:hover': { bgcolor: 'secondary.dark' } }}
-        >
-          Sales Return
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="outlined"
+            startIcon={<CloudDownload />}
+            onClick={onExportClick}
+            sx={{ whiteSpace: 'nowrap' }}
+          >
+            Export Data
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AssignmentReturn />}
+            onClick={onReturnClick}
+            sx={{ bgcolor: 'secondary.main', '&:hover': { bgcolor: 'secondary.dark' } }}
+          >
+            Sales Return
+          </Button>
+        </Box>
       </Box>
     </Paper>
   )

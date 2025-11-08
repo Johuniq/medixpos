@@ -1,3 +1,4 @@
-provider: generic
-url: https://example.com/auto-updates
-updaterCacheDirName: pharmacy-pos-updater
+provider: github
+owner: Johuniq
+repo: medixpos
+updaterCacheDirName: medixpos-updater

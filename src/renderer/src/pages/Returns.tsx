@@ -25,6 +25,9 @@ export default function Returns(): React.JSX.Element {
   const [salesReturns, setSalesReturns] = useState<SalesReturn[]>([])
   const [filteredSalesReturns, setFilteredSalesReturns] = useState<SalesReturn[]>([])
   const [salesSearchTerm, setSalesSearchTerm] = useState('')
+  const [salesPage, setSalesPage] = useState(1)
+  const [salesTotalRecords, setSalesTotalRecords] = useState(0)
+  const [salesLimit] = useState(50)
   const [salesCurrentPage, setSalesCurrentPage] = useState(1)
   const [salesItemsPerPage, setSalesItemsPerPage] = useState(25)
 
@@ -32,6 +35,9 @@ export default function Returns(): React.JSX.Element {
   const [purchaseReturns, setPurchaseReturns] = useState<PurchaseReturn[]>([])
   const [filteredPurchaseReturns, setFilteredPurchaseReturns] = useState<PurchaseReturn[]>([])
   const [purchaseSearchTerm, setPurchaseSearchTerm] = useState('')
+  const [purchasePage, setPurchasePage] = useState(1)
+  const [purchaseTotalRecords, setPurchaseTotalRecords] = useState(0)
+  const [purchaseLimit] = useState(50)
   const [purchaseCurrentPage, setPurchaseCurrentPage] = useState(1)
   const [purchaseItemsPerPage, setPurchaseItemsPerPage] = useState(25)
 
@@ -39,6 +45,9 @@ export default function Returns(): React.JSX.Element {
   const [damagedItems, setDamagedItems] = useState<DamagedItem[]>([])
   const [filteredDamagedItems, setFilteredDamagedItems] = useState<DamagedItem[]>([])
   const [damagedSearchTerm, setDamagedSearchTerm] = useState('')
+  const [damagedPage, setDamagedPage] = useState(1)
+  const [damagedTotalRecords, setDamagedTotalRecords] = useState(0)
+  const [damagedLimit] = useState(50)
   const [damagedCurrentPage, setDamagedCurrentPage] = useState(1)
   const [damagedItemsPerPage, setDamagedItemsPerPage] = useState(25)
 
@@ -64,42 +73,30 @@ export default function Returns(): React.JSX.Element {
 
   useEffect(() => {
     void loadSalesReturns()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [salesPage, salesSearchTerm])
+
+  useEffect(() => {
     void loadPurchaseReturns()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [purchasePage, purchaseSearchTerm])
+
+  useEffect(() => {
     void loadDamagedItems()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [damagedPage, damagedSearchTerm])
 
   useEffect(() => {
-    const filtered = salesReturns.filter(
-      (ret) =>
-        ret.returnNumber.toLowerCase().includes(salesSearchTerm.toLowerCase()) ||
-        ret.customerName?.toLowerCase().includes(salesSearchTerm.toLowerCase()) ||
-        ret.reason?.toLowerCase().includes(salesSearchTerm.toLowerCase())
-    )
-    setFilteredSalesReturns(filtered)
     setSalesCurrentPage(1)
-  }, [salesSearchTerm, salesReturns])
+  }, [salesReturns])
 
   useEffect(() => {
-    const filtered = purchaseReturns.filter(
-      (ret) =>
-        ret.returnNumber.toLowerCase().includes(purchaseSearchTerm.toLowerCase()) ||
-        ret.supplierName.toLowerCase().includes(purchaseSearchTerm.toLowerCase()) ||
-        ret.reason?.toLowerCase().includes(purchaseSearchTerm.toLowerCase())
-    )
-    setFilteredPurchaseReturns(filtered)
     setPurchaseCurrentPage(1)
-  }, [purchaseSearchTerm, purchaseReturns])
+  }, [purchaseReturns])
 
   useEffect(() => {
-    const filtered = damagedItems.filter(
-      (item) =>
-        item.productName.toLowerCase().includes(damagedSearchTerm.toLowerCase()) ||
-        item.reason.toLowerCase().includes(damagedSearchTerm.toLowerCase()) ||
-        item.batchNumber?.toLowerCase().includes(damagedSearchTerm.toLowerCase())
-    )
-    setFilteredDamagedItems(filtered)
     setDamagedCurrentPage(1)
-  }, [damagedSearchTerm, damagedItems])
+  }, [damagedItems])
 
   useEffect(() => {
     if (productSearchTerm.length > 0) {
@@ -113,10 +110,15 @@ export default function Returns(): React.JSX.Element {
 
   const loadSalesReturns = async (): Promise<void> => {
     try {
-      const returns = await window.api.salesReturns.getAll()
-      const typedReturns = returns as unknown as SalesReturn[]
+      const response = await window.api.salesReturns.getPaginated({
+        page: salesPage,
+        limit: salesLimit,
+        search: salesSearchTerm
+      })
+      const typedReturns = response.data as unknown as SalesReturn[]
       setSalesReturns(typedReturns)
       setFilteredSalesReturns(typedReturns)
+      setSalesTotalRecords(response.total)
     } catch (error) {
       console.error('Failed to load sales returns:', error)
       toast.error('Failed to load sales returns')
@@ -125,10 +127,15 @@ export default function Returns(): React.JSX.Element {
 
   const loadPurchaseReturns = async (): Promise<void> => {
     try {
-      const returns = await window.api.purchaseReturns.getAll()
-      const typedReturns = returns as unknown as PurchaseReturn[]
+      const response = await window.api.purchaseReturns.getPaginated({
+        page: purchasePage,
+        limit: purchaseLimit,
+        search: purchaseSearchTerm
+      })
+      const typedReturns = response.data as unknown as PurchaseReturn[]
       setPurchaseReturns(typedReturns)
       setFilteredPurchaseReturns(typedReturns)
+      setPurchaseTotalRecords(response.total)
     } catch (error) {
       console.error('Failed to load purchase returns:', error)
       toast.error('Failed to load purchase returns')
@@ -137,14 +144,46 @@ export default function Returns(): React.JSX.Element {
 
   const loadDamagedItems = async (): Promise<void> => {
     try {
-      const items = await window.api.damagedItems.getAll()
-      const typedItems = items as unknown as DamagedItem[]
+      const response = await window.api.damagedItems.getPaginated({
+        page: damagedPage,
+        limit: damagedLimit,
+        search: damagedSearchTerm
+      })
+      const typedItems = response.data as unknown as DamagedItem[]
       setDamagedItems(typedItems)
       setFilteredDamagedItems(typedItems)
+      setDamagedTotalRecords(response.total)
     } catch (error) {
       console.error('Failed to load damaged items:', error)
       toast.error('Failed to load damaged items')
     }
+  }
+
+  const handleSalesSearchChange = (search: string): void => {
+    setSalesSearchTerm(search)
+    setSalesPage(1)
+  }
+
+  const handleSalesPageChange = (newPage: number): void => {
+    setSalesPage(newPage)
+  }
+
+  const handlePurchaseSearchChange = (search: string): void => {
+    setPurchaseSearchTerm(search)
+    setPurchasePage(1)
+  }
+
+  const handlePurchasePageChange = (newPage: number): void => {
+    setPurchasePage(newPage)
+  }
+
+  const handleDamagedSearchChange = (search: string): void => {
+    setDamagedSearchTerm(search)
+    setDamagedPage(1)
+  }
+
+  const handleDamagedPageChange = (newPage: number): void => {
+    setDamagedPage(newPage)
   }
 
   const searchProducts = async (): Promise<void> => {
@@ -295,7 +334,7 @@ export default function Returns(): React.JSX.Element {
           <SalesReturnsTable
             returns={paginatedSalesReturns}
             searchTerm={salesSearchTerm}
-            onSearchChange={setSalesSearchTerm}
+            onSearchChange={handleSalesSearchChange}
             currentPage={salesCurrentPage}
             totalPages={salesTotalPages}
             itemsPerPage={salesItemsPerPage}
@@ -305,6 +344,10 @@ export default function Returns(): React.JSX.Element {
               setSalesCurrentPage(1)
             }}
             onViewDetails={handleViewDetails}
+            page={salesPage}
+            totalRecords={salesTotalRecords}
+            limit={salesLimit}
+            onServerPageChange={handleSalesPageChange}
           />
         </div>
       )}
@@ -314,7 +357,7 @@ export default function Returns(): React.JSX.Element {
           <PurchaseReturnsTable
             returns={paginatedPurchaseReturns}
             searchTerm={purchaseSearchTerm}
-            onSearchChange={setPurchaseSearchTerm}
+            onSearchChange={handlePurchaseSearchChange}
             currentPage={purchaseCurrentPage}
             totalPages={purchaseTotalPages}
             itemsPerPage={purchaseItemsPerPage}
@@ -324,6 +367,10 @@ export default function Returns(): React.JSX.Element {
               setPurchaseCurrentPage(1)
             }}
             onViewDetails={handleViewDetails}
+            page={purchasePage}
+            totalRecords={purchaseTotalRecords}
+            limit={purchaseLimit}
+            onServerPageChange={handlePurchasePageChange}
           />
         </div>
       )}
@@ -333,7 +380,7 @@ export default function Returns(): React.JSX.Element {
           <DamagedItemsTable
             items={paginatedDamagedItems}
             searchTerm={damagedSearchTerm}
-            onSearchChange={setDamagedSearchTerm}
+            onSearchChange={handleDamagedSearchChange}
             currentPage={damagedCurrentPage}
             totalPages={damagedTotalPages}
             itemsPerPage={damagedItemsPerPage}
@@ -344,6 +391,10 @@ export default function Returns(): React.JSX.Element {
             }}
             onAddDamagedItem={() => setShowDamagedItemModal(true)}
             onViewDetails={handleViewDamagedItemDetails}
+            page={damagedPage}
+            totalRecords={damagedTotalRecords}
+            limit={damagedLimit}
+            onServerPageChange={handleDamagedPageChange}
           />
         </div>
       )}

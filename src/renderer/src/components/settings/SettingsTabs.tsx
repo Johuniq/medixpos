@@ -10,10 +10,13 @@ import {
   Business,
   CardMembership,
   Devices,
+  Info,
   Inventory,
+  LocalAtm,
   Notifications,
   People,
   PointOfSale,
+  QrCodeScanner,
   Receipt,
   Security,
   Settings,
@@ -127,6 +130,20 @@ export default function SettingsTabs({
           sx={{ minHeight: 64 }}
         />
         <Tab
+          value="barcode"
+          label="Barcode Scanner"
+          icon={<QrCodeScanner />}
+          iconPosition="start"
+          sx={{ minHeight: 64 }}
+        />
+        <Tab
+          value="cash-drawer"
+          label="Cash Drawer"
+          icon={<LocalAtm />}
+          iconPosition="start"
+          sx={{ minHeight: 64 }}
+        />
+        <Tab
           value="system"
           label="System"
           icon={<Settings />}
@@ -137,6 +154,13 @@ export default function SettingsTabs({
           value="license"
           label="License"
           icon={<CardMembership />}
+          iconPosition="start"
+          sx={{ minHeight: 64 }}
+        />
+        <Tab
+          value="about"
+          label="About"
+          icon={<Info />}
           iconPosition="start"
           sx={{ minHeight: 64 }}
         />
