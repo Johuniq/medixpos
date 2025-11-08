@@ -5,22 +5,22 @@
  */
 
 import {
+  Error as ErrorIcon,
+  Info as InfoIcon,
+  OpenInNew as OpenInNewIcon,
+  Refresh as RefreshIcon,
+  Warning as WarningIcon
+} from '@mui/icons-material'
+import {
+  Alert,
   Box,
   Card,
   CardContent,
-  Typography,
   Chip,
   IconButton,
-  Alert,
-  Skeleton
+  Skeleton,
+  Typography
 } from '@mui/material'
-import {
-  Warning as WarningIcon,
-  Error as ErrorIcon,
-  Info as InfoIcon,
-  Refresh as RefreshIcon,
-  OpenInNew as OpenInNewIcon
-} from '@mui/icons-material'
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
