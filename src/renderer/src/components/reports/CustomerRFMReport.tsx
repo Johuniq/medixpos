@@ -68,7 +68,8 @@ export default function CustomerRFMReport({ data }: CustomerRFMReportProps): Rea
   }
 
   const totalMonetary = data.reduce((sum, item) => sum + (item?.monetary || 0), 0)
-  const avgFrequency = data.reduce((sum, item) => sum + (item?.frequency || 0), 0) / (data.length || 1)
+  const avgFrequency =
+    data.reduce((sum, item) => sum + (item?.frequency || 0), 0) / (data.length || 1)
 
   return (
     <Box>
