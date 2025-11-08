@@ -112,7 +112,10 @@ const api = {
     getAll: () => ipcRenderer.invoke('db:inventory:getAll'),
     getPaginated: (params: { page?: number; limit?: number; search?: string }) =>
       ipcRenderer.invoke('db:inventory:getPaginated', params),
+    getPaginatedWithBatches: (params: { page?: number; limit?: number; search?: string }) =>
+      ipcRenderer.invoke('db:inventory:getPaginatedWithBatches', params),
     getLowStock: () => ipcRenderer.invoke('db:inventory:getLowStock'),
+    getLowStockWithBatches: () => ipcRenderer.invoke('db:inventory:getLowStockWithBatches'),
     updateQuantity: (
       productId: string,
       quantity: number,
@@ -125,6 +128,31 @@ const api = {
         username: options?.username,
         version: options?.version
       })
+  },
+  // Batches
+  batches: {
+    create: (data: {
+      productId: string
+      batchNumber: string
+      quantity: number
+      expiryDate: string
+      manufactureDate?: string
+      unitCost?: number
+      purchaseId?: string
+    }) => ipcRenderer.invoke('batch:create', data),
+    getByProduct: (productId: string) => ipcRenderer.invoke('batch:getByProduct', productId),
+    selectForSale: (productId: string, quantity: number) =>
+      ipcRenderer.invoke('batch:selectForSale', productId, quantity),
+    update: (data: { id: string; quantity: number; version: number; reason?: string }) =>
+      ipcRenderer.invoke('batch:update', data),
+    delete: (batchId: string) => ipcRenderer.invoke('batch:delete', batchId),
+    getExpiring: (days?: number) => ipcRenderer.invoke('batch:getExpiring', days),
+    getAll: (options?: { page?: number; limit?: number; productId?: string }) =>
+      ipcRenderer.invoke('batch:getAll', options),
+    deductQuantity: (batchId: string, quantity: number, version: number) =>
+      ipcRenderer.invoke('batch:deductQuantity', batchId, quantity, version),
+    dispose: (input: { batchId: string; reason: string; userId?: string }) =>
+      ipcRenderer.invoke('batch:dispose', input)
   },
   // Customers
   customers: {
@@ -424,6 +452,37 @@ const api = {
       ipcRenderer.invoke('printer:print-receipt', saleId, printerId),
     reprintLast: () => ipcRenderer.invoke('printer:reprint-last'),
     getQueue: (limit?: number) => ipcRenderer.invoke('printer:get-queue', limit)
+  },
+
+  // Bulk Operations
+  bulk: {
+    importProducts: (data: {
+      products: Record<string, unknown>[]
+      userId: string
+      username: string
+    }) => ipcRenderer.invoke('bulk:import:products', data),
+    importCustomers: (data: { customers: Record<string, unknown>[]; userId: string }) =>
+      ipcRenderer.invoke('bulk:import:customers', data),
+    updatePrices: (data: {
+      productIds: string[]
+      priceType: 'purchase' | 'sale'
+      adjustmentType: 'percentage' | 'fixed'
+      adjustmentValue: number
+      userId: string
+      username: string
+    }) => ipcRenderer.invoke('bulk:update:prices', data),
+    assignCategories: (data: { productIds: string[]; categoryId: string }) =>
+      ipcRenderer.invoke('bulk:assign:categories', data),
+    activate: (data: { entityType: 'products' | 'customers'; entityIds: string[] }) =>
+      ipcRenderer.invoke('bulk:activate', data),
+    deactivate: (data: { entityType: 'products' | 'customers'; entityIds: string[] }) =>
+      ipcRenderer.invoke('bulk:deactivate', data),
+    deleteEntities: (data: { entityType: 'products' | 'customers'; entityIds: string[] }) =>
+      ipcRenderer.invoke('bulk:delete', data),
+    validateImport: (data: {
+      entityType: 'products' | 'customers'
+      data: Record<string, unknown>[]
+    }) => ipcRenderer.invoke('bulk:validate:import', data)
   },
 
   // Export Data

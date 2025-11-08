@@ -24,9 +24,11 @@ import SessionChecker from './components/SessionChecker'
 import TourManager from './components/TourManager'
 import AuditLogs from './pages/AuditLogs'
 import BankAccounts from './pages/BankAccounts'
+import Batches from './pages/Batches'
 import CategoryUnit from './pages/CategoryUnit'
 import Customers from './pages/Customers'
 import Dashboard from './pages/Dashboard'
+import ExpiryReports from './pages/ExpiryReports'
 import Inventory from './pages/Inventory'
 import Login from './pages/Login'
 import POS from './pages/POS'
@@ -150,6 +152,26 @@ function App(): React.JSX.Element {
                 <ProtectedRoute permission="view_inventory">
                   <PageGuard pageId="/inventory">
                     <Inventory />
+                  </PageGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="batches"
+              element={
+                <ProtectedRoute permission="view_inventory">
+                  <PageGuard pageId="/batches">
+                    <Batches />
+                  </PageGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="expiry-reports"
+              element={
+                <ProtectedRoute permission="view_inventory">
+                  <PageGuard pageId="/expiry-reports">
+                    <ExpiryReports />
                   </PageGuard>
                 </ProtectedRoute>
               }

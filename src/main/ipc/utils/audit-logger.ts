@@ -20,7 +20,14 @@ export function createAuditLog(
   data: {
     userId?: string
     username?: string
-    action: 'create' | 'update' | 'delete' | 'login' | 'logout'
+    action:
+      | 'create'
+      | 'update'
+      | 'delete'
+      | 'login'
+      | 'logout'
+      | 'blocked_expired_sale'
+      | 'critical_expired_batch_detected'
     entityType: string
     entityId?: string
     entityName?: string

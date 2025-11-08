@@ -7,10 +7,12 @@
 import AddIcon from '@mui/icons-material/Add'
 import CategoryIcon from '@mui/icons-material/Category'
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload'
+import MoreVertIcon from '@mui/icons-material/MoreVert'
 import UploadIcon from '@mui/icons-material/Upload'
 import { Box, Button, Container, Paper, Typography } from '@mui/material'
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
+import BulkActionsMenu from '../components/bulk/BulkActionsMenu'
 import ExportModal from '../components/export/ExportModal'
 import BulkImportModal from '../components/products/BulkImportModal'
 import ProductBarcodeModal from '../components/products/ProductBarcodeModal'
@@ -36,6 +38,8 @@ export default function Products(): React.JSX.Element {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [loading, setLoading] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [bulkActionsAnchor, setBulkActionsAnchor] = useState<null | HTMLElement>(null)
 
   // Pagination state
   const [page, setPage] = useState(1)
@@ -310,24 +314,40 @@ export default function Products(): React.JSX.Element {
       </Paper>
 
       {/* Table Header with Bulk Import & Export */}
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2, gap: 2 }}>
-        <div data-tour="export-import">
-          <Button
-            variant="outlined"
-            startIcon={<CloudDownloadIcon />}
-            onClick={() => setShowExportModal(true)}
-          >
-            Export Data
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<UploadIcon />}
-            onClick={() => setShowBulkImportModal(true)}
-            sx={{ ml: 2 }}
-          >
-            Bulk Import
-          </Button>
-        </div>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        {selectedIds.length > 0 && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="body2" color="text.secondary">
+              {selectedIds.length} item(s) selected
+            </Typography>
+            <Button
+              variant="outlined"
+              startIcon={<MoreVertIcon />}
+              onClick={(e) => setBulkActionsAnchor(e.currentTarget)}
+            >
+              Bulk Actions
+            </Button>
+          </Box>
+        )}
+        <Box sx={{ display: 'flex', gap: 2, ml: 'auto' }}>
+          <div data-tour="export-import">
+            <Button
+              variant="outlined"
+              startIcon={<CloudDownloadIcon />}
+              onClick={() => setShowExportModal(true)}
+            >
+              Export Data
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<UploadIcon />}
+              onClick={() => setShowBulkImportModal(true)}
+              sx={{ ml: 2 }}
+            >
+              Bulk Import
+            </Button>
+          </div>
+        </Box>
       </Box>
 
       {/* Products Table */}
@@ -345,6 +365,8 @@ export default function Products(): React.JSX.Element {
           totalRecords={totalRecords}
           limit={limit}
           onPageChange={handlePageChange}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
         />
       </div>
 
@@ -380,6 +402,19 @@ export default function Products(): React.JSX.Element {
         isOpen={showExportModal}
         onClose={() => setShowExportModal(false)}
         defaultExportType="products"
+      />
+
+      {/* Bulk Actions Menu */}
+      <BulkActionsMenu
+        anchorEl={bulkActionsAnchor}
+        open={Boolean(bulkActionsAnchor)}
+        onClose={() => setBulkActionsAnchor(null)}
+        selectedIds={selectedIds}
+        entityType="products"
+        onSuccess={() => {
+          setSelectedIds([])
+          reloadData()
+        }}
       />
     </Container>
   )

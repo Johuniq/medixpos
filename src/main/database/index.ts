@@ -21,6 +21,7 @@ import { addComprehensiveSettings } from './migrations/add-comprehensive-setting
 import { migrateAddCreatedBy } from './migrations/add-created-by'
 import { addCustomerTotalPurchases } from './migrations/add-customer-total-purchases'
 import { addDamagedItemsTable } from './migrations/add-damaged-items-table'
+import { addInventoryBatches } from './migrations/add-inventory-batches'
 import { addMissingOpeningBalances } from './migrations/add-missing-opening-balances'
 import { addMustChangePassword } from './migrations/add-must-change-password'
 import { addNotificationsTable } from './migrations/add-notifications-table'
@@ -93,6 +94,7 @@ function runMigrations(): void {
       addNotificationsTable(sqlite)
       addOptimisticLocking(sqlite)
       addPrinterTables(sqlite)
+      addInventoryBatches(sqlite) // Multi-batch inventory support
     }
   } catch (error) {
     console.error('Migration error:', error)

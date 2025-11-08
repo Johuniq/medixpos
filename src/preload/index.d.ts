@@ -143,12 +143,110 @@ interface API {
       limit: number
       totalPages: number
     }>
+    getPaginatedWithBatches: (params: {
+      page?: number
+      limit?: number
+      search?: string
+    }) => Promise<{
+      data: Record<string, unknown>[]
+      total: number
+      page: number
+      limit: number
+      totalPages: number
+    }>
     getLowStock: () => Promise<Record<string, unknown>[]>
+    getLowStockWithBatches: () => Promise<Record<string, unknown>[]>
     updateQuantity: (
       productId: string,
       quantity: number,
       options?: { userId?: string; username?: string; version?: number }
     ) => Promise<Record<string, unknown>>
+  }
+  batches: {
+    create: (data: {
+      productId: string
+      batchNumber: string
+      quantity: number
+      expiryDate: string
+      manufactureDate?: string
+      unitCost?: number
+      purchaseId?: string
+    }) => Promise<{ success: boolean; id?: string; error?: string }>
+    getByProduct: (productId: string) => Promise<{
+      success: boolean
+      batches?: Array<{
+        id: string
+        batchNumber: string
+        quantity: number
+        expiryDate: string
+        manufactureDate?: string
+        unitCost?: number
+        version: number
+        createdAt: string
+        isExpired: boolean
+        daysUntilExpiry: number
+        expiryStatus: 'expired' | 'critical' | 'warning' | 'alert' | 'good'
+      }>
+      error?: string
+    }>
+    selectForSale: (
+      productId: string,
+      quantity: number
+    ) => Promise<{
+      success: boolean
+      batches?: Array<{
+        id: string
+        batchNumber: string
+        expiryDate: string
+        quantityAvailable: number
+        quantityToUse: number
+        unitCost: number
+        version: number
+      }>
+      totalQuantity?: number
+      warning?: string
+      error?: string
+    }>
+    update: (data: {
+      id: string
+      quantity: number
+      version: number
+      reason?: string
+    }) => Promise<{ success: boolean; error?: string }>
+    delete: (batchId: string) => Promise<{ success: boolean; error?: string }>
+    getExpiring: (days?: number) => Promise<{
+      success: boolean
+      batches?: Array<{
+        id: string
+        batchNumber: string
+        quantity: number
+        expiryDate: string
+        unitCost?: number
+        productId: string
+        productName?: string
+        productSku?: string
+        daysUntilExpiry: number
+        valueAtRisk: number
+        urgency: 'critical' | 'high' | 'medium'
+      }>
+      error?: string
+    }>
+    getAll: (options?: { page?: number; limit?: number; productId?: string }) => Promise<{
+      success: boolean
+      batches?: Record<string, unknown>[]
+      pagination?: {
+        page: number
+        limit: number
+        total: number
+        totalPages: number
+      }
+      error?: string
+    }>
+    deductQuantity: (
+      batchId: string,
+      quantity: number,
+      version: number
+    ) => Promise<{ success: boolean; newQuantity?: number; error?: string }>
   }
   customers: {
     getAll: (search?: string) => Promise<Record<string, unknown>[]>
@@ -776,6 +874,69 @@ interface API {
       success: boolean
       queue?: Array<Record<string, unknown>>
       error?: string
+    }>
+  }
+
+  bulk: {
+    importProducts: (data: {
+      products: Record<string, unknown>[]
+      userId: string
+      username: string
+    }) => Promise<{
+      success: boolean
+      imported: number
+      failed: number
+      errors: Array<{ row: number; field?: string; message: string }>
+    }>
+    importCustomers: (data: { customers: Record<string, unknown>[]; userId: string }) => Promise<{
+      success: boolean
+      imported: number
+      failed: number
+      errors: Array<{ row: number; field?: string; message: string }>
+    }>
+    updatePrices: (data: {
+      productIds: string[]
+      priceType: 'purchase' | 'sale'
+      adjustmentType: 'percentage' | 'fixed'
+      adjustmentValue: number
+      userId: string
+      username: string
+    }) => Promise<{
+      success: boolean
+      updated: number
+      errors: Array<{ id: string; message: string }>
+    }>
+    assignCategories: (data: { productIds: string[]; categoryId: string }) => Promise<{
+      success: boolean
+      updated: number
+      errors: Array<{ id: string; message: string }>
+    }>
+    activate: (data: { entityType: 'products' | 'customers'; entityIds: string[] }) => Promise<{
+      success: boolean
+      updated: number
+      errors: Array<{ id: string; message: string }>
+    }>
+    deactivate: (data: { entityType: 'products' | 'customers'; entityIds: string[] }) => Promise<{
+      success: boolean
+      updated: number
+      errors: Array<{ id: string; message: string }>
+    }>
+    deleteEntities: (data: {
+      entityType: 'products' | 'customers'
+      entityIds: string[]
+    }) => Promise<{
+      success: boolean
+      deleted: number
+      errors: Array<{ id: string; message: string }>
+    }>
+    validateImport: (data: {
+      entityType: 'products' | 'customers'
+      data: Record<string, unknown>[]
+    }) => Promise<{
+      success: boolean
+      valid: number
+      invalid: number
+      errors: Array<{ row: number; field?: string; message: string }>
     }>
   }
 

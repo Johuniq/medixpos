@@ -44,18 +44,158 @@ export function registerSalesHandlers(): void {
           .returning()
           .get()
 
-        // Insert sale items
-        const saleItemsData = items.map((item) => ({
-          id: uuidv4(),
-          saleId,
-          ...item
-        }))
+        // Insert sale items with batch information
+        const saleItemsData: Array<{
+          id: string
+          saleId: string
+          productId: string
+          productName: string
+          quantity: number
+          unitPrice: number
+          discountPercent: number
+          taxRate: number
+          subtotal: number
+          batchNumber: string
+          expiryDate: string
+        }> = []
+        for (const item of items) {
+          // Select batches using FEFO
+          const availableBatches = tx
+            .select()
+            .from(schema.inventoryBatches)
+            .where(
+              and(
+                eq(schema.inventoryBatches.productId, item.productId),
+                gte(schema.inventoryBatches.expiryDate, new Date().toISOString()),
+                sql`${schema.inventoryBatches.quantity} > 0`
+              )
+            )
+            .orderBy(schema.inventoryBatches.expiryDate)
+            .all()
+
+          if (availableBatches.length === 0) {
+            // Check for expired batches
+            const expiredBatches = tx
+              .select()
+              .from(schema.inventoryBatches)
+              .where(
+                and(
+                  eq(schema.inventoryBatches.productId, item.productId),
+                  sql`${schema.inventoryBatches.quantity} > 0`
+                )
+              )
+              .all()
+
+            if (expiredBatches.length > 0) {
+              // Log attempted sale of expired product
+              createAuditLog(tx, {
+                userId: sale.userId,
+                action: 'blocked_expired_sale',
+                entityType: 'sale',
+                entityId: 'attempted',
+                entityName: `Attempted sale of expired product: ${item.productName}`,
+                changes: {
+                  productId: item.productId,
+                  productName: item.productName,
+                  requestedQuantity: item.quantity,
+                  expiredBatches: expiredBatches.map((b) => ({
+                    batchNumber: b.batchNumber,
+                    expiryDate: b.expiryDate,
+                    quantity: b.quantity
+                  })),
+                  reason: 'All available batches are expired',
+                  blockedAt: new Date().toISOString()
+                }
+              })
+
+              throw new Error(
+                `EXPIRED: All batches for "${item.productName}" have expired. Cannot sell expired medicines. Please check the Batches page for disposal.`
+              )
+            }
+            throw new Error(`No stock available for ${item.productName}`)
+          }
+
+          // Calculate total available
+          const totalAvailable = availableBatches.reduce((sum, b) => sum + b.quantity, 0)
+          if (totalAvailable < item.quantity) {
+            throw new Error(
+              `Insufficient stock for ${item.productName}. Available: ${totalAvailable}, Required: ${item.quantity}`
+            )
+          }
+
+          // Deduct from batches using FEFO
+          let remainingQty = item.quantity
+          for (const batch of availableBatches) {
+            if (remainingQty <= 0) break
+
+            // Double-check expiry date as a safety measure
+            const batchExpiryDate = new Date(batch.expiryDate)
+            const now = new Date()
+            if (batchExpiryDate <= now) {
+              // Log critical error - this should never happen
+              createAuditLog(tx, {
+                userId: sale.userId,
+                action: 'critical_expired_batch_detected',
+                entityType: 'sale',
+                entityId: 'attempted',
+                entityName: `Critical: Expired batch passed filter - ${item.productName}`,
+                changes: {
+                  productId: item.productId,
+                  productName: item.productName,
+                  batchId: batch.id,
+                  batchNumber: batch.batchNumber,
+                  expiryDate: batch.expiryDate,
+                  detectedAt: new Date().toISOString(),
+                  severity: 'CRITICAL'
+                }
+              })
+
+              throw new Error(
+                `CRITICAL: Expired batch detected for "${item.productName}" (Batch: ${batch.batchNumber}, Expired: ${batchExpiryDate.toLocaleDateString()}). Sale blocked. Please report this to system administrator.`
+              )
+            }
+
+            const qtyFromBatch = Math.min(batch.quantity, remainingQty)
+
+            // Create sale item with batch info
+            saleItemsData.push({
+              id: uuidv4(),
+              saleId,
+              productId: item.productId,
+              productName: item.productName,
+              quantity: qtyFromBatch,
+              unitPrice: item.unitPrice,
+              discountPercent: item.discountPercent || 0,
+              taxRate: item.taxRate || 0,
+              subtotal: (qtyFromBatch * item.unitPrice * (100 - (item.discountPercent || 0))) / 100,
+              batchNumber: batch.batchNumber,
+              expiryDate: batch.expiryDate
+            })
+
+            // Deduct from batch
+            tx.update(schema.inventoryBatches)
+              .set({
+                quantity: batch.quantity - qtyFromBatch,
+                version: batch.version + 1,
+                updatedAt: new Date().toISOString()
+              })
+              .where(
+                and(
+                  eq(schema.inventoryBatches.id, batch.id),
+                  eq(schema.inventoryBatches.version, batch.version)
+                )
+              )
+              .run()
+
+            remainingQty -= qtyFromBatch
+          }
+        }
 
         if (saleItemsData.length > 0) {
           tx.insert(schema.saleItems).values(saleItemsData).run()
         }
 
-        // Update inventory - check for sufficient stock first
+        // Update old inventory table for backward compatibility
         for (const item of items) {
           const inventory = tx
             .select()
@@ -63,25 +203,12 @@ export function registerSalesHandlers(): void {
             .where(eq(schema.inventory.productId, item.productId))
             .get()
 
-          if (!inventory) {
-            throw new Error(`Inventory record not found for product ${item.productId}`)
-          }
-
-          if (inventory.quantity < item.quantity) {
-            const product = tx
-              .select()
-              .from(schema.products)
-              .where(eq(schema.products.id, item.productId))
-              .get()
-            throw new Error(
-              `Insufficient stock for ${product?.name || 'product'}. Available: ${inventory.quantity}, Required: ${item.quantity}`
+          if (inventory && inventory.quantity >= item.quantity) {
+            tx.run(
+              sql`UPDATE inventory SET quantity = quantity - ${item.quantity} 
+                  WHERE product_id = ${item.productId}`
             )
           }
-
-          tx.run(
-            sql`UPDATE inventory SET quantity = quantity - ${item.quantity} 
-                WHERE product_id = ${item.productId}`
-          )
         }
 
         // Update bank account balance if accountId is provided (add money from sale)

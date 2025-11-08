@@ -9,6 +9,7 @@ import { ipcMain } from 'electron'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../../database'
 import * as schema from '../../database/schema'
+import { triggerExpiryCheck } from '../../services/expiryNotificationService'
 
 interface CreateNotificationInput {
   userId?: string | null
@@ -183,4 +184,15 @@ export function setupNotificationHandlers(): void {
       }
     }
   )
+
+  // Trigger manual expiry check
+  ipcMain.handle('notifications:checkExpiry', async () => {
+    try {
+      const result = await triggerExpiryCheck()
+      return result
+    } catch (error) {
+      console.error('Failed to trigger expiry check:', error)
+      return { success: false, error: 'Failed to trigger expiry check', notificationsCreated: 0 }
+    }
+  })
 }

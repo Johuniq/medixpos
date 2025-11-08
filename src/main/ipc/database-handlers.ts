@@ -26,6 +26,8 @@
 
 import { registerBankAccountHandlers } from './handlers/bank-account-handlers'
 import { registerBarcodeHandlers } from './handlers/barcode-handlers'
+import { registerBatchHandlers } from './handlers/batch-handlers'
+import { registerBulkOperationsHandlers } from './handlers/bulk-operations-handlers'
 import { registerCashDrawerHandlers } from './handlers/cash-drawer-handlers'
 import { registerCategoryUnitHandlers } from './handlers/category-unit-handlers'
 import { registerCustomerHandlers } from './handlers/customer-handlers'
@@ -47,22 +49,24 @@ import { registerUsersHandlers } from './handlers/users-handlers'
  * This is the main entry point that should be called during application initialization
  */
 export function registerDatabaseHandlers(): void {
-  // Register all handler modules
-  registerUsersHandlers()
-  registerCategoryUnitHandlers()
-  registerSupplierHandlers()
-  registerProductInventoryHandlers()
-  registerCustomerHandlers()
-  registerPrescriptionHandlers()
-  registerSalesHandlers()
-  registerPurchaseHandlers()
+  // Register all handlers
   registerBankAccountHandlers()
-  registerReportsSettingsHandlers()
+  registerBarcodeHandlers()
+  registerBatchHandlers()
+  registerBulkOperationsHandlers()
+  registerCashDrawerHandlers()
+  registerCategoryUnitHandlers()
+  registerCustomerHandlers()
   registerDatabaseUtilsHandlers()
+  setupFeatureLicensingHandlers()
   registerHRHandlers()
   setupNotificationHandlers()
-  setupFeatureLicensingHandlers()
-  registerBarcodeHandlers()
-  registerCashDrawerHandlers()
+  registerPrescriptionHandlers()
   registerPrinterHandlers()
+  registerProductInventoryHandlers()
+  registerPurchaseHandlers()
+  registerReportsSettingsHandlers()
+  registerSalesHandlers()
+  registerSupplierHandlers()
+  registerUsersHandlers()
 }

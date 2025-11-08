@@ -299,6 +299,93 @@ export function registerProductInventoryHandlers(): void {
       .all()
   })
 
+  // Get inventory with batch totals (calculates quantity from batches)
+  ipcMain.handle(
+    'db:inventory:getPaginatedWithBatches',
+    async (_, params: PaginationParams): Promise<PaginatedResponse<unknown>> => {
+      const page = params.page || 1
+      const limit = params.limit || 50
+      const offset = (page - 1) * limit
+      const search = params.search?.trim()
+
+      // Build where clause
+      const whereClause = search
+        ? sql`(${schema.products.name} LIKE ${`%${search}%`} OR ${schema.products.sku} LIKE ${`%${search}%`} OR ${schema.products.barcode} LIKE ${`%${search}%`})`
+        : undefined
+
+      // Get products with aggregated batch quantities
+      const baseQuery = `
+        SELECT 
+          p.id as productId,
+          p.name as productName,
+          p.sku as productSku,
+          p.barcode as productBarcode,
+          p.selling_price as sellingPrice,
+          p.reorder_level as reorderLevel,
+          COALESCE(SUM(b.quantity), 0) as quantity,
+          COUNT(b.id) as batchCount
+        FROM products p
+        LEFT JOIN inventory_batches b ON p.id = b.product_id
+        WHERE p.is_active = 1
+        ${whereClause ? `AND (p.name LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ?)` : ''}
+        GROUP BY p.id, p.name, p.sku, p.barcode, p.selling_price, p.reorder_level
+        LIMIT ? OFFSET ?
+      `
+
+      const data = whereClause
+        ? db.prepare(baseQuery).all(`%${search}%`, `%${search}%`, `%${search}%`, limit, offset)
+        : db.prepare(baseQuery).all(limit, offset)
+
+      // Get total count
+      const countQuery = `
+        SELECT COUNT(DISTINCT p.id) as count
+        FROM products p
+        WHERE p.is_active = 1
+        ${whereClause ? `AND (p.name LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ?)` : ''}
+      `
+
+      const countResult = whereClause
+        ? db.prepare(countQuery).get(`%${search}%`, `%${search}%`, `%${search}%`)
+        : db.prepare(countQuery).get()
+
+      const total = (countResult as { count: number })?.count || 0
+
+      return {
+        data,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    }
+  )
+
+  // Get low stock items based on batch totals
+  ipcMain.handle('db:inventory:getLowStockWithBatches', async () => {
+    return db
+      .select({
+        productId: schema.products.id,
+        productName: schema.products.name,
+        productSku: schema.products.sku,
+        quantity: sql<number>`COALESCE(SUM(${schema.inventoryBatches.quantity}), 0)`,
+        reorderLevel: schema.products.reorderLevel,
+        unitPrice: schema.products.sellingPrice,
+        batchCount: sql<number>`COUNT(${schema.inventoryBatches.id})`
+      })
+      .from(schema.products)
+      .leftJoin(schema.inventoryBatches, eq(schema.products.id, schema.inventoryBatches.productId))
+      .where(eq(schema.products.isActive, true))
+      .groupBy(
+        schema.products.id,
+        schema.products.name,
+        schema.products.sku,
+        schema.products.reorderLevel,
+        schema.products.sellingPrice
+      )
+      .having(sql`SUM(${schema.inventoryBatches.quantity}) <= ${schema.products.reorderLevel}`)
+      .all()
+  })
+
   // Update inventory quantity
   ipcMain.handle(
     'db:inventory:updateQuantity',

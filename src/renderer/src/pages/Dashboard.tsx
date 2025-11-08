@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import DashboardHeader from '../components/dashboard/DashboardHeader'
 import DashboardStats from '../components/dashboard/DashboardStats'
+import ExpiryAlertCard from '../components/dashboard/ExpiryAlertCard'
 import LowStockAlertsCard from '../components/dashboard/LowStockAlertsCard'
 import QuickActionsCard from '../components/dashboard/QuickActionsCard'
 import RecentSalesCard from '../components/dashboard/RecentSalesCard'
@@ -258,6 +259,11 @@ export default function Dashboard(): React.JSX.Element {
       >
         <SalesTrendChart data={salesTrendData} currencySymbol={currencySymbol} />
         <RevenueDistributionChart data={revenueDistributionData} currencySymbol={currencySymbol} />
+      </Box>
+
+      {/* Expiry Alerts Section */}
+      <Box sx={{ mb: 3 }} data-tour="expiry-alerts">
+        <ExpiryAlertCard currencySymbol={currencySymbol} />
       </Box>
 
       {/* Two Column Layout */}

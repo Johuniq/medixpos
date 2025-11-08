@@ -78,7 +78,7 @@ export function registerPurchaseHandlers(): void {
           tx.insert(schema.purchaseItems).values(purchaseItemsData).run()
         }
 
-        // Update inventory (convert package units to base units)
+        // Create inventory batches (convert package units to base units)
         for (const item of items) {
           // Get product to check for package unit conversion
           const product = tx
@@ -98,6 +98,31 @@ export function registerPurchaseHandlers(): void {
             actualQuantity = item.quantity * product.unitsPerPackage
           }
 
+          // Create a new batch for this purchase
+          const batchId = uuidv4()
+          const batchNumber =
+            item.batchNumber || `BATCH-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+          const expiryDate =
+            item.expiryDate ||
+            new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // Default 1 year
+
+          tx.insert(schema.inventoryBatches)
+            .values({
+              id: batchId,
+              productId: item.productId,
+              batchNumber,
+              quantity: actualQuantity,
+              expiryDate,
+              manufactureDate: item.manufactureDate,
+              purchaseId,
+              unitCost: item.unitPrice,
+              version: 1,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            })
+            .run()
+
+          // Also update the old inventory table for backward compatibility
           const existing = tx
             .select()
             .from(schema.inventory)
@@ -108,8 +133,8 @@ export function registerPurchaseHandlers(): void {
             tx.update(schema.inventory)
               .set({
                 quantity: existing.quantity + actualQuantity,
-                batchNumber: item.batchNumber,
-                expiryDate: item.expiryDate,
+                batchNumber,
+                expiryDate,
                 manufactureDate: item.manufactureDate,
                 updatedAt: new Date().toISOString()
               })
@@ -122,8 +147,8 @@ export function registerPurchaseHandlers(): void {
                 id,
                 productId: item.productId,
                 quantity: actualQuantity,
-                batchNumber: item.batchNumber,
-                expiryDate: item.expiryDate,
+                batchNumber,
+                expiryDate,
                 manufactureDate: item.manufactureDate
               })
               .run()

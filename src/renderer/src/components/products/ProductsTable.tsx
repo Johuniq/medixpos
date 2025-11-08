@@ -11,6 +11,7 @@ import BarcodeIcon from '@mui/icons-material/QrCode2'
 import WarningIcon from '@mui/icons-material/Warning'
 import {
   Box,
+  Checkbox,
   Chip,
   IconButton,
   Paper,
@@ -44,6 +45,8 @@ interface ProductsTableProps {
   totalRecords?: number
   limit?: number
   onPageChange?: (page: number) => void
+  selectedIds?: string[]
+  onSelectionChange?: (ids: string[]) => void
 }
 
 export default function ProductsTable({
@@ -58,7 +61,9 @@ export default function ProductsTable({
   page: serverPage,
   totalRecords,
   limit: serverLimit,
-  onPageChange
+  onPageChange,
+  selectedIds = [],
+  onSelectionChange
 }: ProductsTableProps): React.JSX.Element {
   // Local pagination for client-side (when server pagination not provided)
   const [localPage, setLocalPage] = React.useState(0)
@@ -234,12 +239,42 @@ export default function ProductsTable({
     )
   }
 
+  const handleSelectAll = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    if (event.target.checked) {
+      const allIds = paginatedProducts.map((p) => p.id)
+      onSelectionChange?.(allIds)
+    } else {
+      onSelectionChange?.([])
+    }
+  }
+
+  const handleSelectOne = (id: string): void => {
+    const newSelection = selectedIds.includes(id)
+      ? selectedIds.filter((selectedId) => selectedId !== id)
+      : [...selectedIds, id]
+    onSelectionChange?.(newSelection)
+  }
+
   return (
     <Box>
       <TableContainer component={Paper} sx={{ maxHeight: 540, overflowX: 'auto' }}>
         <Table stickyHeader aria-label="sticky table" sx={{ minWidth: 1200 }}>
           <TableHead>
             <TableRow>
+              {onSelectionChange && (
+                <StyledTableCell padding="checkbox">
+                  <Checkbox
+                    indeterminate={
+                      selectedIds.length > 0 && selectedIds.length < paginatedProducts.length
+                    }
+                    checked={
+                      paginatedProducts.length > 0 &&
+                      selectedIds.length === paginatedProducts.length
+                    }
+                    onChange={handleSelectAll}
+                  />
+                </StyledTableCell>
+              )}
               <StyledTableCell>Product</StyledTableCell>
               <StyledTableCell>SKU / Barcode</StyledTableCell>
               <StyledTableCell>Category</StyledTableCell>
@@ -298,9 +333,18 @@ export default function ProductsTable({
                 const category = categories.find((c) => c.id === product.categoryId)
                 const stock = inventory[product.id] || 0
                 const isLowStock = stock <= product.reorderLevel
+                const isSelected = selectedIds.includes(product.id)
 
                 return (
-                  <TableRow key={product.id} hover>
+                  <TableRow key={product.id} hover selected={isSelected}>
+                    {onSelectionChange && (
+                      <TableCell padding="checkbox">
+                        <Checkbox
+                          checked={isSelected}
+                          onChange={() => handleSelectOne(product.id)}
+                        />
+                      </TableCell>
+                    )}
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                         <Box

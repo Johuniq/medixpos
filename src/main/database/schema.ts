@@ -135,6 +135,23 @@ export const inventory = sqliteTable('inventory', {
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
 })
 
+// Inventory Batches table - Multi-batch support for FIFO/FEFO
+export const inventoryBatches = sqliteTable('inventory_batches', {
+  id: text('id').primaryKey(),
+  productId: text('product_id')
+    .notNull()
+    .references(() => products.id),
+  batchNumber: text('batch_number').notNull(),
+  quantity: integer('quantity').notNull().default(0),
+  expiryDate: text('expiry_date').notNull(), // Required for FEFO
+  manufactureDate: text('manufacture_date'),
+  purchaseId: text('purchase_id'), // Link to original purchase
+  unitCost: real('unit_cost'), // Cost per unit for this batch
+  version: integer('version').notNull().default(1), // Optimistic locking
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`)
+})
+
 // Customers table
 export const customers = sqliteTable('customers', {
   id: text('id').primaryKey(),
