@@ -4,14 +4,17 @@
  * Unauthorized use, copying, or distribution is strictly prohibited.
  */
 
-import { Box, Button, Typography } from '@mui/material'
+import { Box, Button, Chip, Typography } from '@mui/material'
 import { useEffect } from 'react'
 import toast from 'react-hot-toast'
 import CartList from '../components/pos/CartList'
 import CustomerSearch from '../components/pos/CustomerSearch'
+import KeyboardHelpDialog from '../components/pos/KeyboardHelpDialog'
 import PaymentPanel from '../components/pos/PaymentPanel'
 import ProductGrid from '../components/pos/ProductGrid'
+import QuickProductSearch from '../components/pos/QuickProductSearch'
 import SaleCompleteDialog from '../components/pos/SaleCompleteDialog'
+import { useKeyboardShortcuts, useKeyboardWorkflow } from '../hooks/useKeyboardWorkflow'
 import { usePOS } from '../hooks/usePOS'
 import { useSettingsStore } from '../store/settingsStore'
 import { printPDFReceipt } from '../utils/pdfPrint'
@@ -65,6 +68,73 @@ export default function POS(): React.JSX.Element {
     handleReset,
     handleAccountSelect
   } = usePOS()
+
+  // Keyboard workflow hooks
+  const keyboard = useKeyboardWorkflow()
+
+  // Define keyboard shortcuts
+  const shortcuts = {
+    F1: () => keyboard.setShowHelpDialog(true),
+    F2: () => keyboard.focusQuickProduct(),
+    F3: () => keyboard.focusCustomer(),
+    F4: () => keyboard.focusPayment(),
+    F5: () => {
+      if (cart.items.length > 0 && parseFloat(cashReceived) >= total) {
+        handleCheckout()
+      } else {
+        toast.error('Cannot checkout: Cart empty or insufficient payment')
+      }
+    },
+    F6: () => keyboard.focusDiscount(),
+    F7: () => {
+      cart.clearCart()
+      toast.success('Cart cleared')
+    },
+    F8: () => {
+      handleReset()
+      toast.success('All fields reset')
+    },
+    F9: () => {
+      if (completedSaleDetails) {
+        handleThermalPrint()
+      } else {
+        toast.error('No receipt to print')
+      }
+    },
+    F10: () => keyboard.focusQuantity(),
+    F11: () => toast('Hold transaction feature coming soon', { icon: '⏸️' }),
+    F12: () => toast('Settings shortcut - Feature coming soon', { icon: '⚙️' }),
+    Enter: () => {
+      if (keyboard.currentMode === 'normal' && products.length > 0) {
+        addToCart(products[0])
+      }
+    },
+    Escape: () => {
+      if (keyboard.currentMode !== 'normal') {
+        keyboard.setMode('normal')
+        keyboard.setActiveInput('')
+      }
+    },
+    Plus: () => {
+      if (cart.items.length > 0) {
+        const lastItem = cart.items[cart.items.length - 1]
+        cart.updateQuantity(lastItem.productId, lastItem.quantity + 1)
+      }
+    },
+    Minus: () => {
+      if (cart.items.length > 0) {
+        const lastItem = cart.items[cart.items.length - 1]
+        if (lastItem.quantity > 1) {
+          cart.updateQuantity(lastItem.productId, lastItem.quantity - 1)
+        }
+      }
+    },
+    Star: () => keyboard.focusDiscount(),
+    Slash: () => keyboard.focusQuickProduct()
+  }
+
+  // Enable keyboard shortcuts
+  useKeyboardShortcuts(shortcuts, true)
 
   const handlePdfPrint = (): void => {
     if (!completedSaleDetails) {
@@ -141,9 +211,22 @@ export default function POS(): React.JSX.Element {
         sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}
       >
         <Box>
-          <Typography variant="h4" component="h1" fontWeight="bold" gutterBottom>
-            Point of Sale
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+            <Typography variant="h4" component="h1" fontWeight="bold">
+              Point of Sale
+            </Typography>
+            <Chip
+              label="Press F1 for shortcuts"
+              size="small"
+              sx={{
+                bgcolor: 'primary.100',
+                color: 'primary.dark',
+                cursor: 'pointer',
+                '&:hover': { bgcolor: 'primary.200' }
+              }}
+              onClick={() => keyboard.setShowHelpDialog(true)}
+            />
+          </Box>
           <Typography variant="body2" color="text.secondary">
             Process sales transactions and manage customer purchases
           </Typography>
@@ -239,6 +322,49 @@ export default function POS(): React.JSX.Element {
         onPdfPrint={handlePdfPrint}
         onThermalPrint={handleThermalPrint}
       />
+
+      {/* Keyboard Help Dialog */}
+      <KeyboardHelpDialog
+        open={keyboard.showHelpDialog}
+        onClose={() => keyboard.setShowHelpDialog(false)}
+      />
+
+      {/* Quick Product Search */}
+      <QuickProductSearch
+        open={keyboard.activeInput === 'product'}
+        onClose={() => {
+          keyboard.setActiveInput('')
+          keyboard.setMode('normal')
+        }}
+        products={products}
+        onProductSelect={addToCart}
+        currencySymbol={currencySymbol}
+      />
+
+      {/* Keyboard Mode Status Bar */}
+      {keyboard.currentMode !== 'normal' && (
+        <Box
+          sx={{
+            position: 'fixed',
+            bottom: 16,
+            left: 16,
+            right: 16,
+            p: 1,
+            bgcolor: 'warning.100',
+            border: 1,
+            borderColor: 'warning.300',
+            borderRadius: 2,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1300
+          }}
+        >
+          <Typography variant="body2" sx={{ color: 'warning.dark', fontWeight: 600 }}>
+            ⌨️ Keyboard Mode: {keyboard.currentMode.toUpperCase()} | Press Escape to cancel
+          </Typography>
+        </Box>
+      )}
     </Box>
   )
 }
